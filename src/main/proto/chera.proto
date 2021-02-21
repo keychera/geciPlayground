@@ -1,0 +1,20 @@
+/**
+  customer is a service which holds the functionalites of handling the customers who are registering the application
+*/
+syntax = "proto3";
+
+package self.chera;
+
+option java_package = "self.chera.proto";
+
+message UniverseRequest {
+  uint64 count = 1;
+  string name = 2;
+}
+message UniverseResponse {
+  bool status = 1;
+}
+
+service CheraHandler {
+  rpc CreateUniverse(UniverseRequest) returns (UniverseResponse) {};
+}
