@@ -17,4 +17,5 @@ message UniverseResponse {
 
 service CheraHandler {
   rpc CreateUniverse(UniverseRequest) returns (UniverseResponse) {};
+  rpc DestroyUniverse(UniverseRequest) returns (UniverseResponse) {};
 }
