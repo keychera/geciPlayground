@@ -33,4 +33,18 @@ public class CheraRPC{
             return (req) -> getClient().createUniverse(req);
         }
     }
+
+    public static class DestroyUniverse extends CheraRPCAction<Chera.UniverseRequest, Chera.UniverseResponse>{
+        public Chera.UniverseRequest.Builder requestBuilder = Chera.UniverseRequest.newBuilder();
+
+        @Override
+        protected Chera.UniverseRequest getRequest() {
+            return requestBuilder.build();
+        }
+
+        @Override
+        protected Function<Chera.UniverseRequest, Chera.UniverseResponse> getAction() {
+            return (req) -> getClient().destroyUniverse(req);
+        }
+    }
 }
