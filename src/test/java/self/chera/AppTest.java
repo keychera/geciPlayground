@@ -1,6 +1,5 @@
 package self.chera;
 
-import static javax0.geci.api.Source.maven;
 import static org.junit.Assert.*;
 
 import io.grpc.MethodDescriptor;
@@ -9,13 +8,12 @@ import javax0.geci.builder.Builder;
 import javax0.geci.engine.Geci;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
-import self.chera.proto.Chera;
+import self.chera.grpc.RPCGenerator;
 import self.chera.proto.CheraHandlerGrpc;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
-import java.lang.reflect.TypeVariable;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -33,19 +31,17 @@ public class AppTest {
     }
 
     @Test
-    public void testAccessor() throws Exception {
-        Geci geci;
-        Assertions.assertFalse(
-                (geci = new Geci()).register(Accessor.builder().build()).register(Builder.builder().build()).generate(),
+    public void testAccessor() throws IOException {
+        Geci geci = new Geci();
+        Assertions.assertFalse(geci.register(Accessor.builder().build()).register(Builder.builder().build()).generate(),
                 geci.failed());
     }
 
     @Test
-    public void testRpcActionGenerator() {
+    public void testRpcActionGenerator() throws IOException {
         Class<CheraHandlerGrpc> handler = CheraHandlerGrpc.class;
-        List<Field> allMethodDescriptor =
-                Arrays.stream(handler.getDeclaredFields()).filter(t -> t.getType().isAssignableFrom(MethodDescriptor.class))
-                        .collect(Collectors.toList());
+        List<Field> allMethodDescriptor = Arrays.stream(handler.getDeclaredFields())
+                .filter(t -> t.getType().isAssignableFrom(MethodDescriptor.class)).collect(Collectors.toList());
         for (Field declaredField : allMethodDescriptor) {
             ParameterizedType types = null;
             String serviceName = null;
@@ -62,5 +58,8 @@ public class AppTest {
 
             System.out.printf("%s %s %s%n", serviceName, requestName, responseName);
         }
+        Geci geci = new Geci();
+        Assertions.assertFalse(geci.register(new RPCGenerator()).generate(),
+                geci.failed());
     }
 }
