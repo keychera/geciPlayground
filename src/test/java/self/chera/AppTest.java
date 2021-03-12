@@ -8,7 +8,6 @@ import javax0.geci.builder.Builder;
 import javax0.geci.engine.Geci;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
-import self.chera.grpc.RPCGenerator;
 import self.chera.proto.CheraHandlerGrpc;
 
 import java.io.IOException;
