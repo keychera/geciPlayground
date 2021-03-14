@@ -1,19 +1,20 @@
-package self.chera;
+package generators;
 
 import org.jboss.forge.roaster.Roaster;
 import org.jboss.forge.roaster.model.source.JavaClassSource;
-import org.junit.Test;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Serializable;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class RoasterTest {
-    private static final String PACKAGE_LOC = "src/main/java/self/chera/grpc";
+    private static final String GEN_LOC = "target/generated-sources/rpc-actions";
 
-    @Test
-    public void testRpcActionRoaster() {
+    public static void main(String[] args) {
+        prepareGeneratedFolder();
         String className = "CheraDummyRoaster";
 
         final JavaClassSource javaClass = Roaster.create(JavaClassSource.class);
@@ -29,7 +30,11 @@ public class RoasterTest {
 
         javaClass.addMethod().setConstructor(true).setPublic().setBody("this.id = id;")
                 .addParameter(Integer.class, "id");
-        String filename = String.format("%s/%s.java", PACKAGE_LOC, className);
+
+        javaClass.addMethod().setName("printFullName").setPublic().
+                setBody("System.out.println(firstName + \" \" + lastName);");
+
+        String filename = String.format("%s/%s.java", GEN_LOC, className);
         try {
             File myObj = new File(filename);
             if (myObj.createNewFile()) {
@@ -43,6 +48,14 @@ public class RoasterTest {
             System.out.println("Successfully wrote to the file.");
         } catch (IOException e) {
             System.out.println("An error occurred.");
+            e.printStackTrace();
+        }
+    }
+
+    private static void prepareGeneratedFolder() {
+        try {
+            Files.createDirectories(Path.of(GEN_LOC));
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
