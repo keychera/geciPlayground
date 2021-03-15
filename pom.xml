@@ -194,7 +194,7 @@
               <goal>java</goal>
             </goals>
             <configuration>
-              <mainClass>generators.RoasterTest</mainClass>
+              <mainClass>generators.RPCActionsGenerator</mainClass>
             </configuration>
           </execution>
         </executions>

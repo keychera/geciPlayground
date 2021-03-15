@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-public class RoasterTest {
+public class RPCActionsGenerator {
     private static final String GEN_LOC = "target/generated-sources/rpc-actions";
     private static final String PACKAGE_NAME = "self.chera.generated.grpc";
 
