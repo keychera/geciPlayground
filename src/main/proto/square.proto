@@ -17,6 +17,11 @@ message BlueRequest {
   string name = 2;
 }
 
+message PurpleRequest {
+  RedRequest red = 1;
+  BlueRequest blue = 2;
+}
+
 message PurpleResponse {
   bool red = 1;
   bool blue = 2;
@@ -25,4 +30,7 @@ message PurpleResponse {
 service SquareHandler {
   rpc Red(RedRequest) returns (PurpleResponse) {};
   rpc Blue(BlueRequest) returns (PurpleResponse) {};
+  rpc RedStream(stream RedRequest) returns (PurpleResponse) {};
+  rpc BlueStream(BlueRequest) returns (stream PurpleResponse) {};
+  rpc PurpleStream(stream PurpleRequest) returns (stream PurpleResponse) {};
 }
