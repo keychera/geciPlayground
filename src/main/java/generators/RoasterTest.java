@@ -23,13 +23,14 @@ import java.util.stream.Collectors;
 
 public class RoasterTest {
     private static final String GEN_LOC = "target/generated-sources/rpc-actions";
+    private static final String PACKAGE_NAME = "self.chera.generated.grpc";
 
     public static void main(String[] args) {
         prepareGeneratedFolder();
         String className = "CheraRPC";
 
         final JavaClassSource rpcActionsClass = Roaster.create(JavaClassSource.class);
-        rpcActionsClass.setPackage("generated.grpc").setName("CheraRPC");
+        rpcActionsClass.setPackage(PACKAGE_NAME).setName("CheraRPC");
 
         final JavaClassSource parentRpcAction = Roaster.create(JavaClassSource.class);
 
@@ -113,7 +114,7 @@ public class RoasterTest {
             rpcActionsClass.addNestedType(anRpcActionClass);
         }
 
-        String filename = String.format("%s/%s.java", GEN_LOC, className);
+        String filename = String.format("%s/%s.java", GEN_LOC + "/" + PACKAGE_NAME.replace(".", "/"), className);
         try {
             File myObj = new File(filename);
             if (myObj.createNewFile()) {
@@ -133,7 +134,7 @@ public class RoasterTest {
 
     private static void prepareGeneratedFolder() {
         try {
-            Files.createDirectories(Path.of(GEN_LOC));
+            Files.createDirectories(Path.of(GEN_LOC + "/" + PACKAGE_NAME.replace(".", "/")));
         } catch (IOException e) {
             e.printStackTrace();
         }
