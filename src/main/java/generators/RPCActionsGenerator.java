@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 public class RPCActionsGenerator {
     private static final String GEN_LOC = "target/generated-sources/rpc-actions";
     private static final String PACKAGE_NAME = "self.chera.generated.grpc";
-    private static final String PROTO_URL = "gproto+https://chera.me";
+    private static final String PROTO_URL = "gproto+https://square.me";
     private static final String DOT = "_dot_";
     private static String packageFolderName;
 
@@ -60,7 +60,7 @@ public class RPCActionsGenerator {
                     .setSuperType("RPCAction<Req, Res>")
                     .addField().setName("clientBuilder")
                         .setPublic().setType(ClientBuilder.class)
-                        .setLiteralInitializer("Clients.builder(\"gproto+https://chera.me\");")
+                        .setLiteralInitializer(String.format("Clients.builder(\"%s\");", PROTO_URL))
                     .getOrigin()
                     .addMethod().setName("getClient")
                         .setPublic().setReturnType(wrapper.stubClass)
@@ -97,12 +97,13 @@ public class RPCActionsGenerator {
                 Class<?> protoClass = ((Class<?>) types.getActualTypeArguments()[0]).getEnclosingClass();
                 String protoPackage = protoClass.getPackageName();
                 String originalRequestTypeName = types.getActualTypeArguments()[0].getTypeName().replace("$", ".");
+                String originalResponseTypeName = types.getActualTypeArguments()[1].getTypeName().replace("$", ".");
+                System.out.printf("Adding service class %s, req: %s res: %s%n", serviceName, originalRequestTypeName,
+                        originalResponseTypeName);
                 String requestTypeName =
                         getNotSoSimpleName(originalRequestTypeName.replace(protoPackage + ".", ""));
                 String responseTypeName =
-                        getNotSoSimpleName(types.getActualTypeArguments()[1].getTypeName().replace("$", ".").replace(protoPackage + ".", ""));
-                System.out.printf("Adding service class %s, req: %s res: %s%n", serviceName, requestTypeName,
-                        responseTypeName);
+                        getNotSoSimpleName(originalResponseTypeName.replace(protoPackage + ".", ""));
 
                 Class<?> requestType = (Class<?>) types.getActualTypeArguments()[0];
                 List<Class<?>> buffer =
