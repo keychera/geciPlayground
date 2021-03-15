@@ -5,7 +5,7 @@ syntax = "proto3";
 
 package self.chera;
 
-option java_package = "self.waltz.proto";
+option java_package = "you.waltz.proto";
 
 message StepRequest {
   uint64 count = 1;

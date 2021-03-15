@@ -188,8 +188,35 @@
             <configuration>
               <includes>
                 <include>generators/*.java</include>
-                <include>self/**/proto/*.java</include>
+                <include>**/**/proto/*.java</include>
               </includes>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- copy resources -->
+      <plugin>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>2.6</version>
+        <executions>
+          <execution>
+            <id>copy-proto</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${basedir}/target/classes/protoFiles</outputDirectory>
+              <encoding>UTF-8</encoding>
+              <resources>
+                <resource>
+                  <directory>${basedir}/src/main/proto</directory>
+                  <includes>
+                    <include>**/*.proto</include>
+                  </includes>
+                </resource>
+              </resources>
             </configuration>
           </execution>
         </executions>

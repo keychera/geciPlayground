@@ -12,9 +12,7 @@ import org.jboss.forge.roaster.model.source.JavaClassSource;
 import self.chera.grpc.RPCAction;
 import self.chera.grpc.RPCStream;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.net.URL;
@@ -27,7 +25,6 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class RPCActionsGenerator {
-    private static final List<String> PROTO_SOURCE_PACKAGES = Arrays.asList("self.chera.proto", "self.waltz.proto");
     private static final String GENERATED_TARGET_LOCATION = "target/generated-sources/rpc-actions";
     private static final String GENERATED_PACKAGE = "self.chera.generated.grpc";
     private static final String PROTO_URL = "gproto+https://square.me";
@@ -202,9 +199,31 @@ public class RPCActionsGenerator {
         }
     }
 
+    @SneakyThrows
     private static Map<String, HandlerWrapper.HandlerWrapperBuilder> getListOfProtoHandler() {
         Map<String, HandlerWrapper.HandlerWrapperBuilder> handlers = new HashMap<>();
-        PROTO_SOURCE_PACKAGES.forEach(packageSource -> {
+        List<String> allProtoPackages = new ArrayList<>();
+
+        URL protoFolder = Thread.currentThread().getContextClassLoader().getResource("protoFiles");
+
+        assert protoFolder != null;
+        File[] protoFiles = new File(protoFolder.getFile()).listFiles((dir, name) -> name.endsWith(".proto"));
+        // Find the classes
+
+        assert protoFiles != null;
+        for (File file : protoFiles) {
+            BufferedReader br = new BufferedReader(new FileReader(file));
+            String line, javaPackage = null;
+            while ((line = br.readLine()) != null && javaPackage == null) {
+                Matcher m = Pattern.compile("option *java_package *= *\"(.*)\";").matcher(line);
+                if (m.matches()) {
+                    javaPackage = m.group(1);
+                }
+            }
+            allProtoPackages.add(javaPackage);
+        }
+
+        allProtoPackages.forEach(packageSource -> {
             URL root = Thread.currentThread().getContextClassLoader().getResource(packageSource.replace(".", "/"));
 
             // Filter .class files.
