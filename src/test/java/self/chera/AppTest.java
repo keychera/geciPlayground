@@ -3,11 +3,7 @@ package self.chera;
 import static org.junit.Assert.*;
 
 import io.grpc.MethodDescriptor;
-import javax0.geci.accessor.Accessor;
-import javax0.geci.builder.Builder;
-import javax0.geci.engine.Geci;
 import org.junit.Test;
-import org.junit.jupiter.api.Assertions;
 import self.chera.proto.CheraHandlerGrpc;
 
 import java.io.IOException;
@@ -30,14 +26,7 @@ public class AppTest {
     }
 
     @Test
-    public void testAccessor() throws IOException {
-        Geci geci = new Geci();
-        Assertions.assertFalse(geci.register(Accessor.builder().build()).register(Builder.builder().build()).generate(),
-                geci.failed());
-    }
-
-    @Test
-    public void testRpcActionGenerator() throws IOException {
+    public void testRpcActionGenerator() {
         Class<CheraHandlerGrpc> handler = CheraHandlerGrpc.class;
         List<Field> allMethodDescriptor = Arrays.stream(handler.getDeclaredFields())
                 .filter(t -> t.getType().isAssignableFrom(MethodDescriptor.class)).collect(Collectors.toList());
@@ -57,8 +46,5 @@ public class AppTest {
 
             System.out.printf("%s %s %s%n", serviceName, requestName, responseName);
         }
-        Geci geci = new Geci();
-        Assertions.assertFalse(geci.register(new RPCGenerator()).generate(),
-                geci.failed());
     }
 }

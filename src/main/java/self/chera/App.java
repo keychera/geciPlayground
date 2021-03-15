@@ -1,15 +1,12 @@
 package self.chera;
 
-import javax0.geci.annotations.Geci;
 import self.chera.grpc.CheraDummyRoaster;
 
 /**
  * Hello world!
  *
  */
-@Geci("accessor")
-@Geci("builder")
-public class App 
+public class App
 {
     private int example;
     
