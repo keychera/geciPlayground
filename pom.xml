@@ -170,12 +170,12 @@
             <id>compile generators</id>
             <phase>generate-sources</phase>
             <goals>
-              <goal>testCompile</goal>
+              <goal>compile</goal>
             </goals>
             <configuration>
-              <testIncludes>
+              <includes>
                 <include>generators/*.java</include>
-              </testIncludes>
+              </includes>
             </configuration>
           </execution>
         </executions>
@@ -195,7 +195,6 @@
             </goals>
             <configuration>
               <mainClass>generators.RoasterTest</mainClass>
-              <classpathScope>test</classpathScope>
             </configuration>
           </execution>
         </executions>
