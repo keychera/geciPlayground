@@ -27,8 +27,9 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class RPCActionsGenerator {
-    private static final String GEN_LOC = "target/generated-sources/rpc-actions";
-    private static final String PACKAGE_NAME = "self.chera.generated.grpc";
+    private static final String PROTO_SOURCE_PACKAGE = "self.chera.proto";
+    private static final String GENERATED_TARGET_LOCATION = "target/generated-sources/rpc-actions";
+    private static final String GENERATED_PACKAGE = "self.chera.generated.grpc";
     private static final String PROTO_URL = "gproto+https://square.me";
     private static final String DOT = "_dot_";
     private static final String UNARY_PARENT_CLASS = "UnaryRPCAction";
@@ -49,7 +50,7 @@ public class RPCActionsGenerator {
             HandlerWrapper wrapper = wrapperBuilder.build();
             String className = handlerName.replace("Handler", "Grpc");
             final JavaClassSource rpcActionsClass = Roaster.create(JavaClassSource.class);
-            rpcActionsClass.setPackage(PACKAGE_NAME).setName(className);
+            rpcActionsClass.setPackage(GENERATED_PACKAGE).setName(className);
 
             // each grpc service class
             Class<?> handler = wrapper.handlerGrpcClass;
@@ -203,9 +204,8 @@ public class RPCActionsGenerator {
 
     @SneakyThrows
     private static Map<String, HandlerWrapper.HandlerWrapperBuilder> getListOfProtoHandler() {
-        String packageName = "self.chera.proto";
         Map<String, HandlerWrapper.HandlerWrapperBuilder> handlers = new HashMap<>();
-        URL root = Thread.currentThread().getContextClassLoader().getResource(packageName.replace(".", "/"));
+        URL root = Thread.currentThread().getContextClassLoader().getResource(PROTO_SOURCE_PACKAGE.replace(".", "/"));
 
         // Filter .class files.
         assert root != null;
@@ -222,15 +222,15 @@ public class RPCActionsGenerator {
                     handlers.put(handlerName, HandlerWrapper.builder());
                 }
                 if (className.matches(".*Grpc$")) {
-                    Class<?> cls = Class.forName(packageName + "." + className);
+                    Class<?> cls = Class.forName(PROTO_SOURCE_PACKAGE + "." + className);
                     handlers.get(handlerName).handlerGrpcClass(cls);
                 } else if (className.matches(".*Grpc.*BlockingStub")) {
-                    Class<?> cls = Class.forName(packageName + "." + className);
+                    Class<?> cls = Class.forName(PROTO_SOURCE_PACKAGE + "." + className);
                     handlers.get(handlerName).blockingStubClass(cls);
                 } else if (className.matches(".*Grpc.*FutureStub")) {
                     // do nothing
                 } else if (className.matches(".*Grpc.*Stub")) {
-                    Class<?> cls = Class.forName(packageName + "." + className);
+                    Class<?> cls = Class.forName(PROTO_SOURCE_PACKAGE + "." + className);
                     handlers.get(handlerName).stubClass(cls);
                 }
             }
@@ -240,7 +240,7 @@ public class RPCActionsGenerator {
 
     private static void prepareGeneratedFolder() {
         try {
-            packageFolderName = GEN_LOC + "/" + PACKAGE_NAME.replace(".", "/");
+            packageFolderName = GENERATED_TARGET_LOCATION + "/" + GENERATED_PACKAGE.replace(".", "/");
             Files.createDirectories(Path.of(packageFolderName));
         } catch (IOException e) {
             e.printStackTrace();
