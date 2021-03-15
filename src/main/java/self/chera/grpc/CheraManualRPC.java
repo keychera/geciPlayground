@@ -8,7 +8,7 @@ import self.chera.proto.CheraHandlerGrpc.CheraHandlerBlockingStub;
 
 import java.util.function.Function;
 
-public class CheraRPC{
+public class CheraManualRPC {
     public static abstract class CheraRPCAction<Req extends GeneratedMessageV3, Res extends GeneratedMessageV3> extends RPCAction<Req, Res> {
         public ClientBuilder clientBuilder = Clients.builder("gproto+https://chera.me");
 
