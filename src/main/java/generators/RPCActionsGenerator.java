@@ -4,11 +4,13 @@ import com.google.protobuf.GeneratedMessageV3;
 import com.linecorp.armeria.client.ClientBuilder;
 import com.linecorp.armeria.client.Clients;
 import io.grpc.MethodDescriptor;
+import io.grpc.stub.StreamObserver;
 import lombok.Builder;
 import lombok.SneakyThrows;
 import org.jboss.forge.roaster.Roaster;
 import org.jboss.forge.roaster.model.source.JavaClassSource;
 import self.chera.grpc.RPCAction;
+import self.chera.grpc.RPCStream;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -29,6 +31,8 @@ public class RPCActionsGenerator {
     private static final String PACKAGE_NAME = "self.chera.generated.grpc";
     private static final String PROTO_URL = "gproto+https://square.me";
     private static final String DOT = "_dot_";
+    private static final String UNARY_PARENT_CLASS = "UnaryRPCAction";
+    private static final String CLIENT_STREAM_PARENT_CLASS = "ClientStreamRPCAction";
     private static String packageFolderName;
 
     @Builder
@@ -40,46 +44,12 @@ public class RPCActionsGenerator {
 
     public static void main(String[] args) {
         prepareGeneratedFolder();
-
         Map<String, HandlerWrapper.HandlerWrapperBuilder> listOfHandler = getListOfProtoHandler();
         listOfHandler.forEach((handlerName, wrapperBuilder) -> {
             HandlerWrapper wrapper = wrapperBuilder.build();
             String className = handlerName.replace("Handler", "Grpc");
-
             final JavaClassSource rpcActionsClass = Roaster.create(JavaClassSource.class);
             rpcActionsClass.setPackage(PACKAGE_NAME).setName(className);
-
-            final JavaClassSource parentRpcAction = Roaster.create(JavaClassSource.class);
-
-            // Parent RPC Action class
-            parentRpcAction.setName("CheraRPCAction")
-                    .setPublic().setStatic(true).setAbstract(true)
-                    .addTypeVariable("Req").setBounds(GeneratedMessageV3.class)
-                    .getOrigin()
-                    .addTypeVariable("Res").setBounds(GeneratedMessageV3.class)
-                    .getOrigin()
-                    .setSuperType("RPCAction<Req, Res>")
-                    .addField().setName("clientBuilder")
-                        .setPublic().setType(ClientBuilder.class)
-                        .setLiteralInitializer(String.format("Clients.builder(\"%s\");", PROTO_URL))
-                    .getOrigin()
-                    .addMethod().setName("getClient")
-                        .setPublic().setReturnType(wrapper.blockingStubClass)
-                        .setBody(String.format("%1$s client = clientBuilder.build"
-                                + "(%1$s.class);\n"
-                                + "clientBuilder = Clients.builder(\"%2$s\");\n"
-                                + "return client;",
-                                wrapper.blockingStubClass.getSimpleName(), PROTO_URL))
-            ;
-
-            rpcActionsClass.addImport(GeneratedMessageV3.class);
-            rpcActionsClass.addImport(RPCAction.class);
-            rpcActionsClass.addImport(ClientBuilder.class);
-            rpcActionsClass.addImport(Clients.class);
-            rpcActionsClass.addImport(wrapper.blockingStubClass);
-            rpcActionsClass.addNestedType(parentRpcAction);
-
-
 
             // each grpc service class
             Class<?> handler = wrapper.handlerGrpcClass;
@@ -101,48 +71,63 @@ public class RPCActionsGenerator {
                 assert serviceName != null;
                 Class<?> protoClass = ((Class<?>) types.getActualTypeArguments()[0]).getEnclosingClass();
                 String protoPackage = protoClass.getPackageName();
-                String originalRequestTypeName = types.getActualTypeArguments()[0].getTypeName().replace("$", ".");
-                String originalResponseTypeName = types.getActualTypeArguments()[1].getTypeName().replace("$", ".");
+                Class<?> requestType = (Class<?>) types.getActualTypeArguments()[0];
+                Class<?> responseType = (Class<?>) types.getActualTypeArguments()[1];
+                String requestTypeName = requestType.getTypeName().replace("$", ".");
+                String responseTypeName = responseType.getTypeName().replace("$", ".");
+                System.out.printf("Adding service (%s) class %s, req: %s res: %s%n", serviceType.name(), serviceName,
+                        requestTypeName, responseTypeName);
 
-                System.out.printf("Adding service (%s) class %s, req: %s res: %s%n", serviceType.name() , serviceName, originalRequestTypeName, originalResponseTypeName);
+                rpcActionsClass.addImport(protoClass);
+                rpcActionsClass.addImport(Function.class);
+
+                String dot_requestTypeName, dot_responseTypeName, dot_builderTypeName;
                 switch (serviceType) {
                     case UNARY:
-                        String requestTypeName =
-                                getNotSoSimpleName(originalRequestTypeName.replace(protoPackage + ".", ""));
-                        String responseTypeName =
-                                getNotSoSimpleName(originalResponseTypeName.replace(protoPackage + ".", ""));
+                        addUnaryParent(rpcActionsClass, wrapper);
+                        dot_requestTypeName = getDotSimpleName(requestTypeName.replace(protoPackage + ".", ""));
+                        dot_responseTypeName = getDotSimpleName(responseTypeName.replace(protoPackage + ".", ""));
+                        dot_builderTypeName = getDotBuilderTypeName(protoPackage, requestType, requestTypeName);
 
-                        Class<?> requestType = (Class<?>) types.getActualTypeArguments()[0];
-                        List<Class<?>> buffer =
-                                Arrays.stream(requestType.getNestMembers()).filter(c -> c.getName().replace("$", ".").equals(String.format("%s.Builder", originalRequestTypeName)))
-                                        .collect(Collectors.toList());
-                        Class<?> builderClass = buffer.get(0);
-                        String builderTypeName = getNotSoSimpleName(builderClass.getCanonicalName().replace(protoPackage + ".", ""));
+                        final JavaClassSource unaryActionClass = Roaster.create(JavaClassSource.class);
+                        unaryActionClass.setName(serviceName).setPublic().setStatic(true).setSuperType(
+                                String.format("%s<%s,%s>", UNARY_PARENT_CLASS, dot_requestTypeName,
+                                        dot_responseTypeName)).addField().setName("requestBuilder").setPublic()
+                                .setType(dot_builderTypeName)
+                                .setLiteralInitializer(String.format("%s.newBuilder();", dot_requestTypeName))
+                                .getOrigin().addMethod().setName("getRequest").setProtected()
+                                .setReturnType(dot_requestTypeName).setBody("return requestBuilder.build();")
+                                .getOrigin().addMethod().setName("getAction").setProtected().setReturnType(
+                                String.format("Function<%s,%s>", dot_requestTypeName, dot_responseTypeName)).setBody(
+                                String.format("return (req) -> getClient().%s(req);",
+                                        lowercaseFirstLetter(serviceName))).getOrigin();
 
-                        final JavaClassSource anRpcActionClass = Roaster.create(JavaClassSource.class);
-                        anRpcActionClass.setName(serviceName)
-                                .setPublic().setStatic(true)
-                                .setSuperType(String.format("%s<%s,%s>",parentRpcAction.getName(), requestTypeName, responseTypeName))
-                                .addField().setName("requestBuilder")
-                                .setPublic().setType(builderTypeName)
-                                .setLiteralInitializer(String.format("%s.newBuilder();", requestTypeName))
-                                .getOrigin()
-                                .addMethod().setName("getRequest")
-                                .setProtected().setReturnType(requestTypeName)
-                                .setBody("return requestBuilder.build();")
-                                .getOrigin()
-                                .addMethod().setName("getAction")
-                                .setProtected().setReturnType(String.format("Function<%s,%s>",requestTypeName, responseTypeName))
-                                .setBody(String.format("return (req) -> getClient().%s(req);", lowercaseFirstLetter(serviceName)))
-                                .getOrigin()
-                        ;
-
-                        rpcActionsClass.addImport(protoClass);
-                        rpcActionsClass.addImport(Function.class);
-                        rpcActionsClass.addNestedType(anRpcActionClass);
+                        rpcActionsClass.addNestedType(unaryActionClass);
                         break;
                     case CLIENT_STREAMING:
-                        System.out.println("Client streaming generation not implemented yet");
+                        addClientStreamParent(rpcActionsClass, wrapper);
+                        dot_requestTypeName = getDotSimpleName(requestTypeName.replace(protoPackage + ".", ""));
+                        dot_responseTypeName = getDotSimpleName(responseTypeName.replace(protoPackage + ".", ""));
+                        dot_builderTypeName = getDotBuilderTypeName(protoPackage, requestType, requestTypeName);
+
+                        final JavaClassSource clientStreamActionClass = Roaster.create(JavaClassSource.class);
+                        clientStreamActionClass.setName(serviceName).setPublic().setStatic(true).setSuperType(
+                                String.format("%s<%s,%s>", CLIENT_STREAM_PARENT_CLASS, dot_requestTypeName,
+                                        dot_responseTypeName)).addField().setName("requestBuilder").setPublic()
+                                .setType(dot_builderTypeName)
+                                .setLiteralInitializer(String.format("%s.newBuilder();", dot_requestTypeName))
+                                .getOrigin().addMethod().setName("getRequest").setProtected()
+                                .setReturnType(dot_requestTypeName)
+                                .setBody("var req = requestBuilder.build(); requestBuilder.clear(); return req;")
+                                .getOrigin().addMethod().setName("getRequestStreamAction").setProtected().setReturnType(
+                                String.format("Function<StreamObserver<%s>,StreamObserver<%s>>", dot_responseTypeName,
+                                        // switched response and request position for ClientStream
+                                        dot_requestTypeName)).setBody(
+                                String.format("return (resStream) -> getClient().%s(resStream);",
+                                        lowercaseFirstLetter(serviceName))).getOrigin();
+
+                        rpcActionsClass.addImport(StreamObserver.class);
+                        rpcActionsClass.addNestedType(clientStreamActionClass);
                         break;
                     default:
                         System.out.println("not implemented yet");
@@ -170,6 +155,52 @@ public class RPCActionsGenerator {
         });
     }
 
+    private static void addUnaryParent(JavaClassSource targetSource, HandlerWrapper wrapper) {
+        if (!targetSource.hasNestedType(UNARY_PARENT_CLASS)) {
+            // Parent RPC Action class
+            final JavaClassSource parentRpcAction = Roaster.create(JavaClassSource.class);
+
+            parentRpcAction.setName(UNARY_PARENT_CLASS).setPrivate().setStatic(true).setAbstract(true)
+                    .addTypeVariable("Req").setBounds(GeneratedMessageV3.class).getOrigin().addTypeVariable("Res")
+                    .setBounds(GeneratedMessageV3.class).getOrigin().setSuperType("RPCAction<Req, Res>").addField()
+                    .setName("clientBuilder").setPublic().setType(ClientBuilder.class)
+                    .setLiteralInitializer(String.format("Clients.builder(\"%s\");", PROTO_URL)).getOrigin().addMethod()
+                    .setName("getClient").setPublic().setReturnType(wrapper.blockingStubClass).setBody(
+                    String.format("return clientBuilder.build(%1$s.class);",
+                            wrapper.blockingStubClass.getSimpleName()));
+
+            targetSource.addImport(GeneratedMessageV3.class);
+            targetSource.addImport(RPCAction.class);
+            targetSource.addImport(ClientBuilder.class);
+            targetSource.addImport(Clients.class);
+            targetSource.addImport(wrapper.blockingStubClass);
+            targetSource.addNestedType(parentRpcAction);
+        }
+    }
+
+    private static void addClientStreamParent(JavaClassSource targetSource, HandlerWrapper wrapper) {
+        if (!targetSource.hasNestedType(CLIENT_STREAM_PARENT_CLASS)) {
+            // Parent RPC Action class
+            final JavaClassSource parentRpcAction = Roaster.create(JavaClassSource.class);
+
+            parentRpcAction.setName(CLIENT_STREAM_PARENT_CLASS).setPrivate().setStatic(true).setAbstract(true)
+                    .addTypeVariable("Req").setBounds(GeneratedMessageV3.class).getOrigin().addTypeVariable("Res")
+                    .setBounds(GeneratedMessageV3.class).getOrigin().setSuperType("RPCStream<Req, Res>").addField()
+                    .setName("clientBuilder").setPublic().setType(ClientBuilder.class)
+                    .setLiteralInitializer(String.format("Clients.builder(\"%s\");", PROTO_URL)).getOrigin().addMethod()
+                    .setName("getClient").setPublic().setReturnType(wrapper.stubClass).setBody(
+                    String.format("return clientBuilder.responseTimeoutMillis(10000).build(%s.class);",
+                            wrapper.stubClass.getSimpleName()));
+
+            targetSource.addImport(GeneratedMessageV3.class);
+            targetSource.addImport(RPCStream.class);
+            targetSource.addImport(ClientBuilder.class);
+            targetSource.addImport(Clients.class);
+            targetSource.addImport(wrapper.stubClass);
+            targetSource.addNestedType(parentRpcAction);
+        }
+    }
+
     @SneakyThrows
     private static Map<String, HandlerWrapper.HandlerWrapperBuilder> getListOfProtoHandler() {
         String packageName = "self.chera.proto";
@@ -177,9 +208,11 @@ public class RPCActionsGenerator {
         URL root = Thread.currentThread().getContextClassLoader().getResource(packageName.replace(".", "/"));
 
         // Filter .class files.
+        assert root != null;
         File[] files = new File(root.getFile()).listFiles((dir, name) -> name.endsWith(".class"));
 
         // Find the classes
+        assert files != null;
         for (File file : files) {
             String className = file.getName().replaceAll(".class$", "");
             Matcher m = Pattern.compile("(.*)Grpc.*").matcher(className);
@@ -196,7 +229,7 @@ public class RPCActionsGenerator {
                     handlers.get(handlerName).blockingStubClass(cls);
                 } else if (className.matches(".*Grpc.*FutureStub")) {
                     // do nothing
-                } else if (className.matches(".*Grpc.*Stub")){
+                } else if (className.matches(".*Grpc.*Stub")) {
                     Class<?> cls = Class.forName(packageName + "." + className);
                     handlers.get(handlerName).stubClass(cls);
                 }
@@ -215,10 +248,18 @@ public class RPCActionsGenerator {
     }
 
     private static String lowercaseFirstLetter(String str) {
-        return str.substring(0,1).toLowerCase() + str.substring(1);
+        return str.substring(0, 1).toLowerCase() + str.substring(1);
     }
 
-    private static String getNotSoSimpleName (String str) {
+    private static String getDotSimpleName(String str) {
         return str.replace(".", DOT);
+    }
+
+    private static String getDotBuilderTypeName(String protoPackage, Class<?> requestType, String requestTypeName) {
+        List<Class<?>> buffer = Arrays.stream(requestType.getNestMembers())
+                .filter(c -> c.getName().replace("$", ".").equals(String.format("%s.Builder", requestTypeName)))
+                .collect(Collectors.toList());
+        Class<?> builderClass = buffer.get(0);
+        return getDotSimpleName(builderClass.getCanonicalName().replace(protoPackage + ".", ""));
     }
 }
