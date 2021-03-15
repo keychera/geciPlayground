@@ -27,7 +27,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class RPCActionsGenerator {
-    private static final String PROTO_SOURCE_PACKAGE = "self.chera.proto";
+    private static final List<String> PROTO_SOURCE_PACKAGES = Arrays.asList("self.chera.proto", "self.waltz.proto");
     private static final String GENERATED_TARGET_LOCATION = "target/generated-sources/rpc-actions";
     private static final String GENERATED_PACKAGE = "self.chera.generated.grpc";
     private static final String PROTO_URL = "gproto+https://square.me";
@@ -202,39 +202,45 @@ public class RPCActionsGenerator {
         }
     }
 
-    @SneakyThrows
     private static Map<String, HandlerWrapper.HandlerWrapperBuilder> getListOfProtoHandler() {
         Map<String, HandlerWrapper.HandlerWrapperBuilder> handlers = new HashMap<>();
-        URL root = Thread.currentThread().getContextClassLoader().getResource(PROTO_SOURCE_PACKAGE.replace(".", "/"));
+        PROTO_SOURCE_PACKAGES.forEach(packageSource -> {
+            URL root = Thread.currentThread().getContextClassLoader().getResource(packageSource.replace(".", "/"));
 
-        // Filter .class files.
-        assert root != null;
-        File[] files = new File(root.getFile()).listFiles((dir, name) -> name.endsWith(".class"));
+            // Filter .class files.
+            assert root != null;
+            File[] files = new File(root.getFile()).listFiles((dir, name) -> name.endsWith(".class"));
 
-        // Find the classes
-        assert files != null;
-        for (File file : files) {
-            String className = file.getName().replaceAll(".class$", "");
-            Matcher m = Pattern.compile("(.*)Grpc.*").matcher(className);
-            if (m.matches()) {
-                String handlerName = m.group(1);
-                if (!handlers.containsKey(handlerName)) {
-                    handlers.put(handlerName, HandlerWrapper.builder());
-                }
-                if (className.matches(".*Grpc$")) {
-                    Class<?> cls = Class.forName(PROTO_SOURCE_PACKAGE + "." + className);
-                    handlers.get(handlerName).handlerGrpcClass(cls);
-                } else if (className.matches(".*Grpc.*BlockingStub")) {
-                    Class<?> cls = Class.forName(PROTO_SOURCE_PACKAGE + "." + className);
-                    handlers.get(handlerName).blockingStubClass(cls);
-                } else if (className.matches(".*Grpc.*FutureStub")) {
-                    // do nothing
-                } else if (className.matches(".*Grpc.*Stub")) {
-                    Class<?> cls = Class.forName(PROTO_SOURCE_PACKAGE + "." + className);
-                    handlers.get(handlerName).stubClass(cls);
+            // Find the classes
+            assert files != null;
+            for (File file : files) {
+                String className = file.getName().replaceAll(".class$", "");
+                Matcher m = Pattern.compile("(.*)Grpc.*").matcher(className);
+                if (m.matches()) {
+                    String handlerName = m.group(1);
+                    if (!handlers.containsKey(handlerName)) {
+                        handlers.put(handlerName, HandlerWrapper.builder());
+                    }
+                    try {
+                        if (className.matches(".*Grpc$")) {
+                            Class<?> cls = Class.forName(packageSource + "." + className);
+                            handlers.get(handlerName).handlerGrpcClass(cls);
+                        } else if (className.matches(".*Grpc.*BlockingStub")) {
+                            Class<?> cls = Class.forName(packageSource + "." + className);
+                            handlers.get(handlerName).blockingStubClass(cls);
+                        } else if (className.matches(".*Grpc.*FutureStub")) {
+                            // do nothing
+                        } else if (className.matches(".*Grpc.*Stub")) {
+                            Class<?> cls = Class.forName(packageSource + "." + className);
+                            handlers.get(handlerName).stubClass(cls);
+                        }
+                    } catch (ClassNotFoundException e) {
+                        e.printStackTrace();
+                        throw new RuntimeException(e.getMessage());
+                    }
                 }
             }
-        }
+        });
         return handlers;
     }
 

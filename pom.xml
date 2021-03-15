@@ -188,7 +188,7 @@
             <configuration>
               <includes>
                 <include>generators/*.java</include>
-                <include>self/chera/proto/*.java</include>
+                <include>self/**/proto/*.java</include>
               </includes>
             </configuration>
           </execution>
