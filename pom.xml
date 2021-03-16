@@ -188,7 +188,7 @@
             <configuration>
               <includes>
                 <include>generators/*.java</include>
-                <include>**/**/proto/*.java</include>
+                <include>**/proto/*.java</include>
               </includes>
             </configuration>
           </execution>

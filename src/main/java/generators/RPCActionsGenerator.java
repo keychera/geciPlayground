@@ -209,7 +209,7 @@ public class RPCActionsGenerator {
     @SneakyThrows
     private static Map<String, HandlerWrapper.HandlerWrapperBuilder> getListOfProtoHandler() {
         Map<String, HandlerWrapper.HandlerWrapperBuilder> handlers = new HashMap<>();
-        List<String> allProtoPackages = new ArrayList<>();
+        Set<String> allProtoPackages = new HashSet<>();
 
         URL protoFolder = Thread.currentThread().getContextClassLoader().getResource("protoFiles");
 
@@ -227,65 +227,77 @@ public class RPCActionsGenerator {
                     javaPackage = m.group(1);
                 }
             }
-            allProtoPackages.add(javaPackage);
+            if (javaPackage != null) {
+                allProtoPackages.add(javaPackage);
+            }  else {
+                br = new BufferedReader(new FileReader(file));
+                while ((line = br.readLine()) != null && javaPackage == null) {
+                    Matcher m = Pattern.compile("package *(.*);").matcher(line);
+                    if (m.matches()) {
+                        javaPackage = m.group(1);
+                        allProtoPackages.add(javaPackage);
+                    }
+                }
+            }
         }
 
         allProtoPackages.forEach(packageSource -> {
             URL root = Thread.currentThread().getContextClassLoader().getResource(packageSource.replace(".", "/"));
 
             // Filter .class files.
-            assert root != null;
-            File[] files = new File(root.getFile()).listFiles((dir, name) -> name.endsWith(".class"));
+            if (root != null) {
+                File[] files = new File(root.getFile()).listFiles((dir, name) -> name.endsWith(".class"));
 
-            // Find the classes
-            assert files != null;
-            for (File file : files) {
-                String className = file.getName().replaceAll(".class$", "");
-                Matcher m = Pattern.compile("(.*)Grpc.*").matcher(className);
-                if (m.matches()) {
-                    String handlerName = m.group(1);
-                    if (!handlers.containsKey(handlerName)) {
-                        handlers.put(handlerName, HandlerWrapper.builder());
-                    }
-                    try {
-                        if (className.matches(".*Grpc$")) {
-                            Class<?> cls = Class.forName(packageSource + "." + className);
-                            handlers.get(handlerName).handlerGrpcClass(cls);
-                            String protoName = handlerName.replace("Handler", "");
-                            Class<?> protoClass;
-                            try {
-                                protoClass = Class.forName(packageSource + "." + protoName);
-                                handlers.get(handlerName).protoClass(protoClass);
-                            } catch (ClassNotFoundException e) {
-                                e.printStackTrace();
-                                throw new RuntimeException(e.getMessage());
-                            }
-                        } else if (className.matches(".*Grpc.*BlockingStub")) {
-                            Class<?> cls = Class.forName(packageSource + "." + className);
-                            handlers.get(handlerName).blockingStubClass(cls);
-                        } else if (className.matches(".*Grpc.*FutureStub")) {
-                            // do nothing
-                        } else if (className.matches(".*Grpc.*Stub")) {
-                            Class<?> cls = Class.forName(packageSource + "." + className);
-                            handlers.get(handlerName).stubClass(cls);
+                // Find the classes
+                assert files != null;
+                for (File file : files) {
+                    String className = file.getName().replaceAll(".class$", "");
+                    Matcher m = Pattern.compile("(.*)Grpc.*").matcher(className);
+                    if (m.matches()) {
+                        String handlerName = m.group(1);
+                        if (!handlers.containsKey(handlerName)) {
+                            handlers.put(handlerName, HandlerWrapper.builder());
                         }
+                        try {
+                            if (className.matches(".*Grpc$")) {
+                                Class<?> cls = Class.forName(packageSource + "." + className);
+                                handlers.get(handlerName).handlerGrpcClass(cls);
+                                String protoName = handlerName.replace("Handler", "");
+                                Class<?> protoClass;
+                                try {
+                                    protoClass = Class.forName(packageSource + "." + protoName);
+                                    handlers.get(handlerName).protoClass(protoClass);
+                                } catch (ClassNotFoundException e) {
+                                    e.printStackTrace();
+                                    throw new RuntimeException(e.getMessage());
+                                }
+                            } else if (className.matches(".*Grpc.*BlockingStub")) {
+                                Class<?> cls = Class.forName(packageSource + "." + className);
+                                handlers.get(handlerName).blockingStubClass(cls);
+                            } else if (className.matches(".*Grpc.*FutureStub")) {
+                                // do nothing
+                            } else if (className.matches(".*Grpc.*Stub")) {
+                                Class<?> cls = Class.forName(packageSource + "." + className);
+                                handlers.get(handlerName).stubClass(cls);
+                            }
+                        } catch (ClassNotFoundException e) {
+                            e.printStackTrace();
+                            throw new RuntimeException(e.getMessage());
+                        }
+                    }
+                }
+                handlers.forEach((handlerName, wrapperBuilder) -> {
+                    String protoName = handlerName.replace("Handler", "");
+                    Class<?> protoClass;
+                    try {
+                        protoClass = Class.forName(packageSource + "." + protoName);
+                        handlers.get(handlerName).protoClass(protoClass);
                     } catch (ClassNotFoundException e) {
                         e.printStackTrace();
-                        throw new RuntimeException(e.getMessage());
                     }
-                }
-            }
-            handlers.forEach((handlerName, wrapperBuilder) -> {
-                String protoName = handlerName.replace("Handler", "");
-                Class<?> protoClass;
-                try {
-                    protoClass = Class.forName(packageSource + "." + protoName);
-                    handlers.get(handlerName).protoClass(protoClass);
-                } catch (ClassNotFoundException e) {
-                    e.printStackTrace();
-                }
 
-            });
+                });
+            }
         });
         return handlers;
     }
