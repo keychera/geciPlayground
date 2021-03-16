@@ -240,8 +240,15 @@ public class RPCActionsGenerator {
                     }
                 }
             }
+            String serviceName = null;
+            while ((line = br.readLine()) != null && serviceName == null) {
+                Matcher m = Pattern.compile("service *([^{ ]*) *\\{*").matcher(line);
+                if (m.matches()) {
+                    serviceName = m.group(1);
+                }
+            }
             String protoJavaName = makeJavaName(file.getName().replace(".proto", ""));
-            allProtoJavaName.put(protoJavaName.toLowerCase(), protoJavaName);
+            allProtoJavaName.put(serviceName, protoJavaName);
         }
 
         allProtoPackage.forEach(packageSource -> {
@@ -265,8 +272,7 @@ public class RPCActionsGenerator {
                             if (className.matches(".*Grpc$")) {
                                 Class<?> cls = Class.forName(packageSource + "." + className);
                                 handlers.get(handlerName).handlerGrpcClass(cls);
-                                String handlerKey = handlerName.replace("Handler", "");
-                                String protoJavaName = allProtoJavaName.get(handlerKey.toLowerCase());
+                                String protoJavaName = allProtoJavaName.get(handlerName);
                                 Class<?> protoClass;
                                 try {
                                     protoClass = Class.forName(packageSource + "." + protoJavaName);
