@@ -35,6 +35,7 @@ public class RPCActionsGenerator {
 
     @Builder
     private static class HandlerWrapper {
+        private final Class<?> protoClass;
         private final Class<?> handlerGrpcClass;
         private final Class<?> blockingStubClass;
         private final Class<?> stubClass;
@@ -67,7 +68,7 @@ public class RPCActionsGenerator {
                     throw new RuntimeException(e.getMessage());
                 }
                 assert serviceName != null;
-                Class<?> protoClass = ((Class<?>) types.getActualTypeArguments()[0]).getEnclosingClass();
+                Class<?> protoClass = wrapper.protoClass;
                 String protoPackage = protoClass.getPackageName();
                 Class<?> requestType = (Class<?>) types.getActualTypeArguments()[0];
                 Class<?> responseType = (Class<?>) types.getActualTypeArguments()[1];
@@ -77,6 +78,12 @@ public class RPCActionsGenerator {
                         requestTypeName, responseTypeName);
 
                 rpcActionsClass.addImport(protoClass);
+                if (!requestTypeName.contains(protoPackage)) {
+                    rpcActionsClass.addImport(requestTypeName);
+                }
+                if (!responseTypeName.contains(protoPackage)) {
+                    rpcActionsClass.addImport(responseTypeName);
+                }
                 rpcActionsClass.addImport(Function.class);
 
                 String dot_requestTypeName, dot_responseTypeName, dot_builderTypeName;
@@ -85,7 +92,7 @@ public class RPCActionsGenerator {
                         addUnaryParent(rpcActionsClass, wrapper);
                         dot_requestTypeName = getDotSimpleName(requestTypeName.replace(protoPackage + ".", ""));
                         dot_responseTypeName = getDotSimpleName(responseTypeName.replace(protoPackage + ".", ""));
-                        dot_builderTypeName = getDotBuilderTypeName(protoPackage, requestType, requestTypeName);
+                        dot_builderTypeName = getDotBuilderTypeName(protoPackage, requestTypeName);
 
                         final JavaClassSource unaryActionClass = Roaster.create(JavaClassSource.class);
                         unaryActionClass.setName(serviceName).setPublic().setStatic(true).setSuperType(
@@ -106,7 +113,7 @@ public class RPCActionsGenerator {
                         addClientStreamParent(rpcActionsClass, wrapper);
                         dot_requestTypeName = getDotSimpleName(requestTypeName.replace(protoPackage + ".", ""));
                         dot_responseTypeName = getDotSimpleName(responseTypeName.replace(protoPackage + ".", ""));
-                        dot_builderTypeName = getDotBuilderTypeName(protoPackage, requestType, requestTypeName);
+                        dot_builderTypeName = getDotBuilderTypeName(protoPackage, requestTypeName);
 
                         final JavaClassSource clientStreamActionClass = Roaster.create(JavaClassSource.class);
                         clientStreamActionClass.setName(serviceName).setPublic().setStatic(true).setSuperType(
@@ -244,6 +251,15 @@ public class RPCActionsGenerator {
                         if (className.matches(".*Grpc$")) {
                             Class<?> cls = Class.forName(packageSource + "." + className);
                             handlers.get(handlerName).handlerGrpcClass(cls);
+                            String protoName = handlerName.replace("Handler", "");
+                            Class<?> protoClass;
+                            try {
+                                protoClass = Class.forName(packageSource + "." + protoName);
+                                handlers.get(handlerName).protoClass(protoClass);
+                            } catch (ClassNotFoundException e) {
+                                e.printStackTrace();
+                                throw new RuntimeException(e.getMessage());
+                            }
                         } else if (className.matches(".*Grpc.*BlockingStub")) {
                             Class<?> cls = Class.forName(packageSource + "." + className);
                             handlers.get(handlerName).blockingStubClass(cls);
@@ -259,6 +275,17 @@ public class RPCActionsGenerator {
                     }
                 }
             }
+            handlers.forEach((handlerName, wrapperBuilder) -> {
+                String protoName = handlerName.replace("Handler", "");
+                Class<?> protoClass;
+                try {
+                    protoClass = Class.forName(packageSource + "." + protoName);
+                    handlers.get(handlerName).protoClass(protoClass);
+                } catch (ClassNotFoundException e) {
+                    e.printStackTrace();
+                }
+
+            });
         });
         return handlers;
     }
@@ -280,11 +307,8 @@ public class RPCActionsGenerator {
         return str.replace(".", DOT);
     }
 
-    private static String getDotBuilderTypeName(String protoPackage, Class<?> requestType, String requestTypeName) {
-        List<Class<?>> buffer = Arrays.stream(requestType.getNestMembers())
-                .filter(c -> c.getName().replace("$", ".").equals(String.format("%s.Builder", requestTypeName)))
-                .collect(Collectors.toList());
-        Class<?> builderClass = buffer.get(0);
-        return getDotSimpleName(builderClass.getCanonicalName().replace(protoPackage + ".", ""));
+    private static String getDotBuilderTypeName(String protoPackage, String requestTypeName) {
+        String simpleName = requestTypeName.replace(protoPackage + ".", "");
+        return getDotSimpleName(String.format("%s.Builder", simpleName));
     }
 }

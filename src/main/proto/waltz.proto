@@ -4,6 +4,7 @@
 syntax = "proto3";
 
 package self.chera;
+import "google/protobuf/empty.proto";
 
 option java_package = "you.waltz.proto";
 
@@ -17,4 +18,5 @@ message StepResponse {
 
 service WaltzHandler {
   rpc Dance(StepRequest) returns (StepResponse) {};
+  rpc Vibe(google.protobuf.Empty) returns (google.protobuf.Empty) {};
 }
