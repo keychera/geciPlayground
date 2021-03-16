@@ -6,6 +6,7 @@ import com.linecorp.armeria.client.Clients;
 import io.grpc.MethodDescriptor;
 import io.grpc.stub.StreamObserver;
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.SneakyThrows;
 import org.jboss.forge.roaster.Roaster;
 import org.jboss.forge.roaster.model.source.JavaClassSource;
@@ -206,10 +207,17 @@ public class RPCActionsGenerator {
         }
     }
 
+    @Builder
+    @EqualsAndHashCode
+    private static class ProtoWrapper {
+        private final String protoName;
+        private final String protoPackage;
+    }
+
     @SneakyThrows
     private static Map<String, HandlerWrapper.HandlerWrapperBuilder> getListOfProtoHandler() {
         Map<String, HandlerWrapper.HandlerWrapperBuilder> handlers = new HashMap<>();
-        Set<String> allProtoPackages = new HashSet<>();
+        Set<ProtoWrapper> allProto = new HashSet<>();
 
         URL protoFolder = Thread.currentThread().getContextClassLoader().getResource("protoFiles");
 
@@ -219,6 +227,7 @@ public class RPCActionsGenerator {
 
         assert protoFiles != null;
         for (File file : protoFiles) {
+            var protoBuilder = ProtoWrapper.builder();
             BufferedReader br = new BufferedReader(new FileReader(file));
             String line, javaPackage = null;
             while ((line = br.readLine()) != null && javaPackage == null) {
@@ -228,20 +237,23 @@ public class RPCActionsGenerator {
                 }
             }
             if (javaPackage != null) {
-                allProtoPackages.add(javaPackage);
+                protoBuilder.protoPackage(javaPackage);
             }  else {
                 br = new BufferedReader(new FileReader(file));
                 while ((line = br.readLine()) != null && javaPackage == null) {
                     Matcher m = Pattern.compile("package *(.*);").matcher(line);
                     if (m.matches()) {
                         javaPackage = m.group(1);
-                        allProtoPackages.add(javaPackage);
+                        protoBuilder.protoPackage(javaPackage);
                     }
                 }
             }
+            protoBuilder.protoName(UppercaseFirstLetter(file.getName().replace(".proto", "")));
+            allProto.add(protoBuilder.build());
         }
 
-        allProtoPackages.forEach(packageSource -> {
+        allProto.forEach(proto -> {
+            String packageSource = proto.protoPackage;
             URL root = Thread.currentThread().getContextClassLoader().getResource(packageSource.replace(".", "/"));
 
             // Filter .class files.
@@ -262,10 +274,9 @@ public class RPCActionsGenerator {
                             if (className.matches(".*Grpc$")) {
                                 Class<?> cls = Class.forName(packageSource + "." + className);
                                 handlers.get(handlerName).handlerGrpcClass(cls);
-                                String protoName = handlerName.replace("Handler", "");
                                 Class<?> protoClass;
                                 try {
-                                    protoClass = Class.forName(packageSource + "." + protoName);
+                                    protoClass = Class.forName(packageSource + "." + proto.protoName);
                                     handlers.get(handlerName).protoClass(protoClass);
                                 } catch (ClassNotFoundException e) {
                                     e.printStackTrace();
@@ -286,17 +297,6 @@ public class RPCActionsGenerator {
                         }
                     }
                 }
-                handlers.forEach((handlerName, wrapperBuilder) -> {
-                    String protoName = handlerName.replace("Handler", "");
-                    Class<?> protoClass;
-                    try {
-                        protoClass = Class.forName(packageSource + "." + protoName);
-                        handlers.get(handlerName).protoClass(protoClass);
-                    } catch (ClassNotFoundException e) {
-                        e.printStackTrace();
-                    }
-
-                });
             }
         });
         return handlers;
@@ -313,6 +313,10 @@ public class RPCActionsGenerator {
 
     private static String lowercaseFirstLetter(String str) {
         return str.substring(0, 1).toLowerCase() + str.substring(1);
+    }
+
+    private static String UppercaseFirstLetter(String str) {
+        return str.substring(0, 1).toUpperCase() + str.substring(1);
     }
 
     private static String getDotSimpleName(String str) {
