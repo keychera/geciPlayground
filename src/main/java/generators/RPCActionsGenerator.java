@@ -215,10 +215,9 @@ public class RPCActionsGenerator {
         URL protoFolder = Thread.currentThread().getContextClassLoader().getResource("protoFiles");
 
         assert protoFolder != null;
-        File[] protoFiles = new File(protoFolder.getFile()).listFiles((dir, name) -> name.endsWith(".proto"));
-        // Find the classes
+        List<File> protoFiles = listAllFiles(protoFolder.getPath()).stream().filter(f -> f.getName().endsWith(".proto"))
+                .collect(Collectors.toList());
 
-        assert protoFiles != null;
         for (File file : protoFiles) {
             BufferedReader br = new BufferedReader(new FileReader(file));
             String line, javaPackage = null;
@@ -230,7 +229,7 @@ public class RPCActionsGenerator {
             }
             if (javaPackage != null) {
                 allProtoPackage.add(javaPackage);
-            }  else {
+            } else {
                 br = new BufferedReader(new FileReader(file));
                 while ((line = br.readLine()) != null && javaPackage == null) {
                     Matcher m = Pattern.compile("package *(.*);").matcher(line);
@@ -320,8 +319,8 @@ public class RPCActionsGenerator {
 
     private static String makeJavaName(String str) {
         String capitalized = str.substring(0, 1).toUpperCase() + str.substring(1);
-        var tokenized = Arrays.stream(capitalized.split("-")).reduce((subtotal, element) ->
-                subtotal + uppercaseFirstLetter(element));
+        var tokenized = Arrays.stream(capitalized.split("-"))
+                .reduce((subtotal, element) -> subtotal + uppercaseFirstLetter(element));
         return tokenized.orElse(str);
     }
 
@@ -332,5 +331,20 @@ public class RPCActionsGenerator {
     private static String getDotBuilderTypeName(String protoPackage, String requestTypeName) {
         String simpleName = requestTypeName.replace(protoPackage + ".", "");
         return getDotSimpleName(String.format("%s.Builder", simpleName));
+    }
+
+    private static List<File> listAllFiles(String directoryName) {
+        File directory = new File(directoryName);
+        List<File> res = new ArrayList<>();
+        File[] fList = directory.listFiles();
+        if (fList != null)
+            for (File file : fList) {
+                if (file.isFile()) {
+                    res.add(file);
+                } else if (file.isDirectory()) {
+                    res.addAll(listAllFiles(file.getAbsolutePath()));
+                }
+            }
+        return res;
     }
 }
