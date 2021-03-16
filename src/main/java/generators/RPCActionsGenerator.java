@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 public class RPCActionsGenerator {
     private static final String GENERATED_TARGET_LOCATION = "target/generated-sources/rpc-actions";
     private static final String GENERATED_PACKAGE = "self.chera.generated.grpc";
-    private static final String PROTO_URL = "gproto+https://square.me";
+    private static final String PROTO_LITERAL = "\"gproto+https://square.me\"";
     private static final String DOT = "_dot_";
     private static final String UNARY_PARENT_CLASS = "UnaryRPCAction";
     private static final String CLIENT_STREAM_PARENT_CLASS = "ClientStreamRPCAction";
@@ -169,7 +169,7 @@ public class RPCActionsGenerator {
                     .addTypeVariable("Req").setBounds(GeneratedMessageV3.class).getOrigin().addTypeVariable("Res")
                     .setBounds(GeneratedMessageV3.class).getOrigin().setSuperType("RPCAction<Req, Res>").addField()
                     .setName("clientBuilder").setPublic().setType(ClientBuilder.class)
-                    .setLiteralInitializer(String.format("Clients.builder(\"%s\");", PROTO_URL)).getOrigin().addMethod()
+                    .setLiteralInitializer(String.format("Clients.builder(%s);", PROTO_LITERAL)).getOrigin().addMethod()
                     .setName("getClient").setPublic().setReturnType(wrapper.blockingStubClass).setBody(
                     String.format("return clientBuilder.build(%1$s.class);",
                             wrapper.blockingStubClass.getSimpleName()));
@@ -192,7 +192,7 @@ public class RPCActionsGenerator {
                     .addTypeVariable("Req").setBounds(GeneratedMessageV3.class).getOrigin().addTypeVariable("Res")
                     .setBounds(GeneratedMessageV3.class).getOrigin().setSuperType("RPCStream<Req, Res>").addField()
                     .setName("clientBuilder").setPublic().setType(ClientBuilder.class)
-                    .setLiteralInitializer(String.format("Clients.builder(\"%s\");", PROTO_URL)).getOrigin().addMethod()
+                    .setLiteralInitializer(String.format("Clients.builder(%s);", PROTO_LITERAL)).getOrigin().addMethod()
                     .setName("getClient").setPublic().setReturnType(wrapper.stubClass).setBody(
                     String.format("return clientBuilder.responseTimeoutMillis(10000).build(%s.class);",
                             wrapper.stubClass.getSimpleName()));
