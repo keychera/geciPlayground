@@ -1,0 +1,18 @@
+/**
+  customer is a service which holds the functionalites of handling the customers who are registering the application
+*/
+syntax = "proto3";
+
+package self.chera;
+import "google/protobuf/empty.proto";
+
+option java_package = "you.waltz.proto";
+
+message AboutYou {
+  bool stranger = 1;
+  string name = 2;
+}
+
+service AnoyuHandler {
+  rpc Know(AboutYou) returns (google.protobuf.Empty) {};
+}
