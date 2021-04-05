@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package self.proto;
+
+message PastRequest {
+  bool oldMe = 1;
+}
+message FutureResponse {
+  bool newYou = 1;
+}
+
+service DianeIcieHandler {
+  rpc Change(PastRequest) returns (FutureResponse) {};
+}

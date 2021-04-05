@@ -321,7 +321,9 @@ public class RPCActionsGenerator {
         String capitalized = str.substring(0, 1).toUpperCase() + str.substring(1);
         var tokenized = Arrays.stream(capitalized.split("-"))
                 .reduce((subtotal, element) -> subtotal + uppercaseFirstLetter(element));
-        return tokenized.orElse(str);
+        var tokenized2 = Arrays.stream(tokenized.orElse(str).split("_"))
+                .reduce((subtotal, element) -> subtotal + uppercaseFirstLetter(element));
+        return tokenized2.orElse(str);
     }
 
     private static String getDotSimpleName(String str) {
