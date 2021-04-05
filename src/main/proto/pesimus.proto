@@ -1,6 +1,3 @@
-/**
-  customer is a service which holds the functionalites of handling the customers who are registering the application
-*/
 syntax = "proto3";
 
 package self.proto;
