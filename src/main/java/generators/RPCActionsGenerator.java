@@ -7,6 +7,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.stub.StreamObserver;
 import lombok.Builder;
 import lombok.SneakyThrows;
+import org.jboss.forge.roaster.ParserException;
 import org.jboss.forge.roaster.Roaster;
 import org.jboss.forge.roaster.model.source.JavaClassSource;
 import self.chera.grpc.RPCAction;
@@ -143,16 +144,29 @@ public class RPCActionsGenerator {
             String sourceCode = rpcActionsClass.toString().replace(DOT, ".");
             String filename = String.format("%s/%s.java", packageFolderName, className);
             try {
-                File myObj = new File(filename);
-                if (myObj.createNewFile()) {
-                    System.out.println("File created: " + myObj.getName());
+                File classFile = new File(filename);
+                if (classFile.createNewFile()) {
+                    System.out.println("File created: " + classFile.getName());
                 } else {
                     System.out.println("File already exists.");
                 }
-                FileWriter myWriter = new FileWriter(filename);
-                myWriter.write(Roaster.format(sourceCode));
-                myWriter.close();
-                System.out.println("Successfully wrote to the file.");
+                String formattedSourceCode = Roaster.format(sourceCode);
+                try {
+                    var currentClass = Roaster.parse(classFile);
+                    if (currentClass.toString().equals(formattedSourceCode)) {
+                        System.out.printf("%s is up to date!%n", currentClass.getName());
+                    } else {
+                        FileWriter myWriter = new FileWriter(filename);
+                        myWriter.write(formattedSourceCode);
+                        myWriter.close();
+                        System.out.println("Successfully wrote to the file.");
+                    }
+                } catch (ParserException pre) {
+                    FileWriter myWriter = new FileWriter(filename);
+                    myWriter.write(formattedSourceCode);
+                    myWriter.close();
+                    System.out.println("Successfully wrote to the file.");
+                }
             } catch (IOException e) {
                 System.out.println("An error occurred.");
                 e.printStackTrace();
