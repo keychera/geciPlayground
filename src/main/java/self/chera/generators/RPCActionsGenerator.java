@@ -1,4 +1,4 @@
-package generators;
+package self.chera.generators;
 
 import com.google.protobuf.GeneratedMessageV3;
 import com.linecorp.armeria.client.ClientBuilder;

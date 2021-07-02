@@ -184,21 +184,21 @@
         </executions>
       </plugin>
 
-      <!-- compile generators and protos-->
+      <!-- compile self.chera.generators and protos-->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.6.1</version>
         <executions>
           <execution>
-            <id>compile generators</id>
+            <id>compile self.chera.generators</id>
             <phase>generate-sources</phase>
             <goals>
               <goal>compile</goal>
             </goals>
             <configuration>
               <includes>
-                <include>generators/*.java</include>
+                <include>self.chera.generators/*.java</include>
                 <include>**/proto/*.java</include>
               </includes>
             </configuration>
@@ -240,13 +240,13 @@
         <version>1.6.0</version>
         <executions>
           <execution>
-            <id>run rpcactions generators</id>
+            <id>run rpcactions self.chera.generators</id>
             <phase>generate-sources</phase>
             <goals>
               <goal>java</goal>
             </goals>
             <configuration>
-              <mainClass>generators.RPCActionsGenerator</mainClass>
+              <mainClass>self.chera.generators.RPCActionsGenerator</mainClass>
             </configuration>
           </execution>
         </executions>
