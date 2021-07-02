@@ -184,6 +184,7 @@
         </executions>
       </plugin>
 
+
       <!-- compile self.chera.generators and protos-->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
