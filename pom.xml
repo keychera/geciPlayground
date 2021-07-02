@@ -191,14 +191,14 @@
         <version>3.6.1</version>
         <executions>
           <execution>
-            <id>compile self.chera.generators</id>
+            <id>compile generators</id>
             <phase>generate-sources</phase>
             <goals>
               <goal>compile</goal>
             </goals>
             <configuration>
               <includes>
-                <include>self.chera.generators/*.java</include>
+                <include>self/chera/generators/*.java</include>
                 <include>**/proto/*.java</include>
               </includes>
             </configuration>
