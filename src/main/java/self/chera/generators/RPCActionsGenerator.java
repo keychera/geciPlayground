@@ -119,7 +119,7 @@ public class RPCActionsGenerator {
                             addUnaryStaticExec(rpcActionsClass, protoClass, serviceName, requestType, responseType);
                         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
                             e.printStackTrace();
-                            throw new RuntimeException(e);
+                            System.err.printf("not adding static exec method for service: %s%n", serviceName);
                         }
                         break;
                     case CLIENT_STREAMING:
