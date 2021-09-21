@@ -1,8 +1,12 @@
 package self.chera.generators;
 
+import com.google.protobuf.ByteString;
+import com.google.protobuf.Descriptors;
+import com.google.protobuf.Descriptors.FieldDescriptor.JavaType;
 import com.google.protobuf.GeneratedMessageV3;
 import com.linecorp.armeria.client.ClientBuilder;
 import com.linecorp.armeria.client.Clients;
+import org.jboss.forge.roaster.model.source.MethodSource;
 import self.chera.grpc.RPCAction;
 import self.chera.grpc.RPCGlobals;
 import self.chera.grpc.RPCStream;
@@ -11,9 +15,12 @@ import io.grpc.stub.StreamObserver;
 import org.jboss.forge.roaster.ParserException;
 import org.jboss.forge.roaster.Roaster;
 import org.jboss.forge.roaster.model.source.JavaClassSource;
+import self.chera.proto.CheraHandlerGrpc;
 
+import java.beans.Introspector;
 import java.io.*;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.ParameterizedType;
 import java.net.URL;
 import java.nio.file.Files;
@@ -70,9 +77,9 @@ public class RPCActionsGenerator {
                     serviceType = service.getType();
                     serviceName = service.getBareMethodName();
                     types = (ParameterizedType) declaredField.getGenericType();
-                } catch (Exception e) {
+                } catch (IllegalAccessException e) {
                     e.printStackTrace();
-                    throw new RuntimeException(e.getMessage());
+                    throw new RuntimeException(e);
                 }
                 assert serviceName != null;
                 Class<?> protoClass = wrapper.protoClass;
@@ -110,6 +117,12 @@ public class RPCActionsGenerator {
                                 .setBody(String.format("return (req) -> getClient().%s(req);", lowercaseFirstLetter(serviceName))).getOrigin();
 
                         serviceClassToAdd = unaryActionClass;
+                        try {
+                            addUnaryStaticExec(rpcActionsClass, serviceName, requestType, responseType);
+                        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                            e.printStackTrace();
+                            throw new RuntimeException(e);
+                        }
                         break;
                     case CLIENT_STREAMING:
                         addClientStreamParent(rpcActionsClass, wrapper);
@@ -211,6 +224,35 @@ public class RPCActionsGenerator {
             targetSource.addImport(wrapper.stubClass);
             targetSource.addNestedType(parentRpcAction);
         }
+    }
+
+    private static void addUnaryStaticExec(JavaClassSource source, String serviceName, Class<?> requestType,Class<?> responseType) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        var descriptor = requestType.getMethod("getDescriptor");
+        var params = (Descriptors.Descriptor) descriptor.invoke(null);
+        final var methodName = Introspector.decapitalize(serviceName);
+        var unaryStaticExecMethod = source.addMethod().setPublic().setStatic(true).setReturnType(responseType).setName(methodName);
+        var setterList = new ArrayList<String>();
+        params.getFields().forEach(field -> {
+            var setterName = "set" + makeJavaName(field.getName());
+            var paramName = Introspector.decapitalize(makeJavaName(field.getName()));
+            var type = TYPE_MAPPING.getOrDefault(field.getJavaType(), "Object");
+
+            unaryStaticExecMethod.addParameter(type, paramName);
+            setterList.add(String.format(".%s(%s)", setterName, paramName));
+        });
+        var bodyBuilder = new StringBuilder();
+        bodyBuilder
+                .append("        var service = new ").append(serviceName).append("();\n")
+                .append("        service.clientBuilder.addHeader(\"authorization\", \"Bearer \");\n");
+        if (!setterList.isEmpty()) {
+            bodyBuilder.append( "        service.requestBuilder");
+            setterList.forEach(bodyBuilder::append);
+            bodyBuilder.append( ";\n");
+        }
+        bodyBuilder.append(
+                "        return service.exec();"
+        );
+        unaryStaticExecMethod.setBody(bodyBuilder.toString());
     }
 
     private static Map<String, HandlerWrapper> getListOfProtoHandler(String protoFolder) throws IOException {
@@ -349,4 +391,13 @@ public class RPCActionsGenerator {
         }
         return res;
     }
+
+    private static final Map<JavaType, String> TYPE_MAPPING = Map.of(
+            JavaType.INT, int.class.getSimpleName(),
+            JavaType.LONG, long.class.getSimpleName(),
+            JavaType.FLOAT, float.class.getSimpleName(),
+            JavaType.DOUBLE, double.class.getSimpleName(),
+            JavaType.BOOLEAN, boolean.class.getSimpleName(),
+            JavaType.STRING, String.class.getSimpleName()
+    );
 }
