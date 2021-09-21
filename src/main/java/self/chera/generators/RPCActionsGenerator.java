@@ -256,6 +256,11 @@ public class RPCActionsGenerator {
                 unaryStaticExecMethod.addParameter(String.format("%s<%s>", List.class.getCanonicalName(), type), paramName);
                 var setterName = "addAll" + makeJavaName(field.getName());
                 setterList.add(String.format(".%s(%s)", setterName, paramName));
+            } else if (field.getType() == Descriptors.FieldDescriptor.Type.MESSAGE) {
+                var messageType = field.getMessageType().getName();
+                unaryStaticExecMethod.addParameter(String.format("%s.%s", protoClass.getCanonicalName(), messageType), paramName);
+                var setterName = "set" + makeJavaName(field.getName());
+                setterList.add(String.format(".%s(%s)", setterName, paramName));
             } else {
                 unaryStaticExecMethod.addParameter(type, paramName);
                 var setterName = "set" + makeJavaName(field.getName());

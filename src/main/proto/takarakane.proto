@@ -33,6 +33,7 @@ message Dragon {
     EARTH = 3;
   }
   Element naturalElement = 7;
+  Treasure treasure = 8;
 }
 
 enum DragonFamily {
