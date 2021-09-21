@@ -1,0 +1,125 @@
+plugins {
+    id 'java'
+    id 'java-library'
+    id 'maven-publish'
+    id "com.google.protobuf" version "0.8.17"
+    id "idea"
+}
+
+group 'self.chera'
+version '1.1'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = 11
+    targetCompatibility = 11
+}
+
+def lombokVersion = "1.18.20"
+def roasterVersion = "2.23.0.Final"
+def grpcVersion = "1.39.0"
+def armeriaVersion = "1.11.0"
+
+dependencies {
+    // lombok
+    compileOnly group: "org.projectlombok", name: "lombok", version: lombokVersion
+    annotationProcessor group: "org.projectlombok", name: "lombok", version: lombokVersion
+
+    // roaster
+    implementation group: "org.jboss.forge.roaster", name: "roaster-api", version: roasterVersion
+    implementation group: "org.jboss.forge.roaster", name: "roaster-jdt", version: roasterVersion
+
+    // armeria
+    api group: "com.linecorp.armeria", name: "armeria", version: armeriaVersion
+    api group: 'com.linecorp.armeria', name: 'armeria-grpc', version: armeriaVersion
+
+    // awaitility
+    implementation group: "org.awaitility", name: "awaitility", version: "4.1.0"
+
+    // protobuf
+    runtimeOnly group: "com.google.protobuf", name: "protobuf-gradle-plugin", version: "0.8.17"
+    api group: "com.google.protobuf", name: "protobuf-java", version: "3.17.3"
+
+    // grpc
+    api group: "io.grpc", name: "grpc-netty-shaded", version: grpcVersion
+    api group: "io.grpc", name: "grpc-protobuf", version: grpcVersion
+    api group: "io.grpc", name: "grpc-stub", version: grpcVersion
+    compileOnly group: "org.apache.tomcat", name: "annotations-api", version: "6.0.53"
+
+    // testng
+    testImplementation group: 'org.testng', name: 'testng', version: '7.3.0'
+}
+
+String generatedProtoFolder = "$buildDir/generated/sources/proto"
+String generatedRPCActionFolder = "$buildDir/generated/sources/rpcActions"
+
+sourceSets {
+    main {
+        java.srcDirs += generatedRPCActionFolder
+        proto.srcDirs += 'src/main/proto-commons'
+    }
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:3.17.3"
+    }
+    plugins {
+        grpc {
+            artifact = "io.grpc:protoc-gen-grpc-java:1.4.0"
+        }
+    }
+    generateProtoTasks {
+        all()*.plugins {
+            grpc {}
+        }
+    }
+    generatedFilesBaseDir = generatedProtoFolder
+}
+
+tasks.register("copyProto", Copy) {
+    it.from("$projectDir/src/main/proto")
+    it.into("$buildDir/resources/proto")
+    it.outputs.dirs("$buildDir/resources/proto")
+}
+
+tasks.register("compileProtoAndGenerators", JavaCompile) {
+    it.dependsOn = List.of("generateProto", "copyProto")
+    it.source = List.of(
+            sourceSets.main.java.srcDirs,
+            "$generatedProtoFolder/main/grpc",
+            "$generatedProtoFolder/main/java"
+    )
+    it.includes = List.of(
+            "self/chera/generators/*.java",
+            "self/chera/grpc/*.java",
+            "**/proto/*.java",
+    )
+    it.classpath = files(
+            sourceSets.main.compileClasspath.getAsPath()
+    )
+    it.destinationDirectory = sourceSets.main.java.destinationDirectory
+    it.outputs.dirs(List.of(
+            "$buildDir/classes/java/main/self/chera/generators",
+            "$buildDir/classes/java/main/self/chera/grpc",
+            "$buildDir/classes/java/main/self/chera/proto",
+    ))
+}
+
+tasks.register("generateRPCActions", JavaExec) {
+    it.outputs.dirs(generatedRPCActionFolder)
+    it.dependsOn = List.of("compileProtoAndGenerators")
+    it.classpath = files(
+            "$buildDir/classes/java/main",
+            sourceSets.main.compileClasspath.getAsPath()
+    )
+    it.mainClass = "self.chera.generators.RPCActionsGenerator"
+    it.args("$buildDir/resources/proto", generatedRPCActionFolder)
+}
+
+compileJava {
+    dependsOn generateRPCActions
+}

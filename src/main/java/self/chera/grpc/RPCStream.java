@@ -9,10 +9,10 @@ import java.util.function.Function;
 import static org.awaitility.Awaitility.await;
 
 public abstract class RPCStream<Req extends GeneratedMessageV3, Res extends GeneratedMessageV3> {
-    public boolean isReady = false;
-    private Res response;
-    StreamObserver<Req> requestStream;
     final AtomicBoolean streamComplete = new AtomicBoolean(false);
+    public boolean isReady = false;
+    StreamObserver<Req> requestStream;
+    private Res response;
     final StreamObserver<Res> responseStream = new StreamObserver<>() {
         @Override
         public void onNext(Res res) {
