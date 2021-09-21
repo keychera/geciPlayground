@@ -282,10 +282,6 @@ public class RPCActionsGenerator {
         unaryStaticExecMethod.setBody(bodyBuilder.toString());
     }
 
-    private static String mapType(JavaType javaType) {
-        return TYPE_MAPPING.getOrDefault(javaType, "Object");
-    }
-
     private static Map<String, HandlerWrapper> getListOfProtoHandler(String protoFolder) throws IOException {
         Map<String, HandlerWrapper> handlers = new HashMap<>();
         Set<String> allProtoPackage = new HashSet<>();
@@ -421,6 +417,10 @@ public class RPCActionsGenerator {
             }
         }
         return res;
+    }
+
+    private static String mapType(JavaType javaType) {
+        return TYPE_MAPPING.getOrDefault(javaType, "Object");
     }
 
     private static final Map<JavaType, String> TYPE_MAPPING = Map.of(
