@@ -18,16 +18,11 @@ java {
     targetCompatibility = 11
 }
 
-def lombokVersion = "1.18.20"
 def roasterVersion = "2.23.0.Final"
 def grpcVersion = "1.39.0"
 def armeriaVersion = "1.11.0"
 
 dependencies {
-    // lombok
-    compileOnly group: "org.projectlombok", name: "lombok", version: lombokVersion
-    annotationProcessor group: "org.projectlombok", name: "lombok", version: lombokVersion
-
     // roaster
     implementation group: "org.jboss.forge.roaster", name: "roaster-api", version: roasterVersion
     implementation group: "org.jboss.forge.roaster", name: "roaster-jdt", version: roasterVersion
