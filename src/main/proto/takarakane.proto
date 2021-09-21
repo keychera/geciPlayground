@@ -12,14 +12,40 @@ message Map {
   float coordinate = 4;
   double amount = 5;
   int32 ref = 6;
+  bytes pixel = 7;
 }
 
 message Treasure {
   bool status = 1;
 }
 
+message Dragon {
+  uint64 AEGIS = 1;
+  repeated string name = 2;
+  bool isCool = 3;
+  string Species = 4;
+  map<string, float> magicRepertoire = 5;
+  DragonFamily family = 6;
+  enum Element {
+    FIRE = 0;
+    WATER = 1;
+    AIR = 2;
+    EARTH = 3;
+  }
+  Element naturalElement = 7;
+}
+
+enum DragonFamily {
+  NORMAL = 0;
+  QUETZALCOATL = 1;
+  WYVERN = 2;
+  HYDRA = 3;
+  COCKATRICE = 4;
+}
+
 service TakaraKaneHandler {
   rpc SubmergeShip(Map) returns (Treasure) {};
   rpc Unearth(google.protobuf.Empty) returns (Treasure) {};
   rpc Lavish(Treasure) returns (google.protobuf.Empty) {};
+  rpc Fight(Dragon) returns (Treasure) {};
 }

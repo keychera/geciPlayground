@@ -6,7 +6,6 @@ import com.google.protobuf.Descriptors.FieldDescriptor.JavaType;
 import com.google.protobuf.GeneratedMessageV3;
 import com.linecorp.armeria.client.ClientBuilder;
 import com.linecorp.armeria.client.Clients;
-import org.jboss.forge.roaster.model.source.MethodSource;
 import self.chera.grpc.RPCAction;
 import self.chera.grpc.RPCGlobals;
 import self.chera.grpc.RPCStream;
@@ -15,7 +14,6 @@ import io.grpc.stub.StreamObserver;
 import org.jboss.forge.roaster.ParserException;
 import org.jboss.forge.roaster.Roaster;
 import org.jboss.forge.roaster.model.source.JavaClassSource;
-import self.chera.proto.CheraHandlerGrpc;
 
 import java.beans.Introspector;
 import java.io.*;
@@ -41,7 +39,7 @@ public class RPCActionsGenerator {
     );
 
     // for processing
-    private static final String DOT = "_dot_";
+    private static final String DOT = "_d_";
     private static final String UNARY_PARENT_CLASS = "UnaryRPCAction";
     private static final String CLIENT_STREAM_PARENT_CLASS = "ClientStreamRPCAction";
     private static String packageFolderName;
@@ -118,7 +116,7 @@ public class RPCActionsGenerator {
 
                         serviceClassToAdd = unaryActionClass;
                         try {
-                            addUnaryStaticExec(rpcActionsClass, serviceName, requestType, responseType);
+                            addUnaryStaticExec(rpcActionsClass, protoClass, serviceName, requestType, responseType);
                         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
                             e.printStackTrace();
                             throw new RuntimeException(e);
@@ -226,19 +224,43 @@ public class RPCActionsGenerator {
         }
     }
 
-    private static void addUnaryStaticExec(JavaClassSource source, String serviceName, Class<?> requestType,Class<?> responseType) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    private static void addUnaryStaticExec(JavaClassSource source, Class<?> protoClass, String serviceName, Class<?> requestType,
+                                           Class<?> responseType) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         var descriptor = requestType.getMethod("getDescriptor");
         var params = (Descriptors.Descriptor) descriptor.invoke(null);
         final var methodName = Introspector.decapitalize(serviceName);
         var unaryStaticExecMethod = source.addMethod().setPublic().setStatic(true).setReturnType(responseType).setName(methodName);
         var setterList = new ArrayList<String>();
         params.getFields().forEach(field -> {
-            var setterName = "set" + makeJavaName(field.getName());
             var paramName = Introspector.decapitalize(makeJavaName(field.getName()));
-            var type = TYPE_MAPPING.getOrDefault(field.getJavaType(), "Object");
+            var type = mapType(field.getJavaType());
 
-            unaryStaticExecMethod.addParameter(type, paramName);
-            setterList.add(String.format(".%s(%s)", setterName, paramName));
+            if (field.isMapField()) { // mapField is also a repeatedField
+                var mapInfo = field.getMessageType().getFields();
+                var keyType = mapType(mapInfo.get(0).getJavaType());
+                var valueType = mapType(mapInfo.get(1).getJavaType());
+                unaryStaticExecMethod.addParameter(String.format("%s<%s, %s>", Map.class.getCanonicalName(), keyType, valueType), paramName);
+                var setterName = "putAll" + makeJavaName(field.getName());
+                setterList.add(String.format(".%s(%s)", setterName, paramName));
+            } else if (field.getType() == Descriptors.FieldDescriptor.Type.ENUM) {
+                var enumType = field.getEnumType().getName();
+                // a kinda dirty solution to resolve enum inside a request and outside the request. not yet handling deeper layer or imported enum
+                var container = field.getEnumType().getContainingType();
+                if (container != null) {
+                    enumType = String.format("%s.%s", container.getName(), enumType);
+                }
+                unaryStaticExecMethod.addParameter(String.format("%s.%s", protoClass.getCanonicalName(), enumType), paramName);
+                var setterName = "set" + makeJavaName(field.getName());
+                setterList.add(String.format(".%s(%s)", setterName, paramName));
+            } else if (field.isRepeated()) {
+                unaryStaticExecMethod.addParameter(String.format("%s<%s>", List.class.getCanonicalName(), type), paramName);
+                var setterName = "addAll" + makeJavaName(field.getName());
+                setterList.add(String.format(".%s(%s)", setterName, paramName));
+            } else {
+                unaryStaticExecMethod.addParameter(type, paramName);
+                var setterName = "set" + makeJavaName(field.getName());
+                setterList.add(String.format(".%s(%s)", setterName, paramName));
+            }
         });
         var bodyBuilder = new StringBuilder();
         bodyBuilder
@@ -253,6 +275,10 @@ public class RPCActionsGenerator {
                 "        return service.exec();"
         );
         unaryStaticExecMethod.setBody(bodyBuilder.toString());
+    }
+
+    private static String mapType(JavaType javaType) {
+        return TYPE_MAPPING.getOrDefault(javaType, "Object");
     }
 
     private static Map<String, HandlerWrapper> getListOfProtoHandler(String protoFolder) throws IOException {
@@ -393,11 +419,12 @@ public class RPCActionsGenerator {
     }
 
     private static final Map<JavaType, String> TYPE_MAPPING = Map.of(
-            JavaType.INT, int.class.getSimpleName(),
-            JavaType.LONG, long.class.getSimpleName(),
-            JavaType.FLOAT, float.class.getSimpleName(),
-            JavaType.DOUBLE, double.class.getSimpleName(),
-            JavaType.BOOLEAN, boolean.class.getSimpleName(),
-            JavaType.STRING, String.class.getSimpleName()
+            JavaType.INT, Integer.class.getSimpleName(),
+            JavaType.LONG, Long.class.getSimpleName(),
+            JavaType.FLOAT, Float.class.getSimpleName(),
+            JavaType.DOUBLE, Double.class.getSimpleName(),
+            JavaType.BOOLEAN, Boolean.class.getSimpleName(),
+            JavaType.STRING, String.class.getSimpleName(),
+            JavaType.BYTE_STRING, ByteString.class.getCanonicalName()
     );
 }

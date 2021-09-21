@@ -13,7 +13,17 @@ message StepResponse {
   bool status = 1;
 }
 
+message RhythmRequest {
+  enum Style {
+    QUARTER = 0;
+    HALF = 1;
+    FULL = 2;
+  }
+  Style style = 1;
+}
+
 service WaltzHandler {
   rpc Dance(StepRequest) returns (StepResponse) {};
+  rpc Pause(RhythmRequest) returns (StepResponse) {};
   rpc Vibe(google.protobuf.Empty) returns (google.protobuf.Empty) {};
 }
