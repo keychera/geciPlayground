@@ -6,6 +6,7 @@ import com.google.protobuf.Descriptors.FieldDescriptor.JavaType;
 import com.google.protobuf.GeneratedMessageV3;
 import com.linecorp.armeria.client.ClientBuilder;
 import com.linecorp.armeria.client.Clients;
+import self.chera.grpc.GRPCClass;
 import self.chera.grpc.RPCAction;
 import self.chera.grpc.RPCGlobals;
 import self.chera.grpc.RPCStream;
@@ -32,7 +33,7 @@ import java.util.stream.Collectors;
 public class RPCActionsGenerator {
     // configurable
     private static final String GENERATED_PACKAGE = "self.chera.generated.grpc";
-    private static final String PROTO_URL_LITERAL = "Clients.builder(RPCGlobals.url);";
+    private static final String PROTO_URL_LITERAL = "Clients.builder(RPCGlobals.defaultUrl.get());";
     private static final List<String> classesToDeprecate = List.of(
             "DeprecationGrpc.ToBeDeprecated",
             "DeprecationGrpc.AlsoDeprecated"
@@ -62,6 +63,15 @@ public class RPCActionsGenerator {
             String className = handlerName.replace("Handler", "Grpc");
             final JavaClassSource rpcActionsClass = Roaster.create(JavaClassSource.class);
             rpcActionsClass.setPackage(GENERATED_PACKAGE).setName(className);
+
+            rpcActionsClass.addImport(GRPCClass.class);
+            rpcActionsClass.setSuperType(String.format("%s<%s>", GRPCClass.class.getName(), className));
+
+            rpcActionsClass.addMethod().setConstructor(true).setPrivate().setBody("");
+
+            rpcActionsClass.addMethod().setPublic().setStatic(true).setReturnType(className)
+                    .setName(Introspector.decapitalize(className))
+                    .setBody(String.format("return new %s();", className));
 
             // each grpc service class
             Class<?> handler = wrapper.handlerGrpcClass;
@@ -116,7 +126,7 @@ public class RPCActionsGenerator {
 
                         serviceClassToAdd = unaryActionClass;
                         try {
-                            addUnaryStaticExec(rpcActionsClass, protoClass, serviceName, requestType, responseType);
+                            addUnaryExec(rpcActionsClass, protoClass, serviceName, requestType, responseType);
                         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
                             e.printStackTrace();
                             System.err.printf("not adding static exec method for service: %s%n", serviceName);
@@ -224,12 +234,12 @@ public class RPCActionsGenerator {
         }
     }
 
-    private static void addUnaryStaticExec(JavaClassSource source, Class<?> protoClass, String serviceName, Class<?> requestType,
-                                           Class<?> responseType) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    private static void addUnaryExec(JavaClassSource source, Class<?> protoClass, String serviceName, Class<?> requestType,
+                                     Class<?> responseType) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         var descriptor = requestType.getMethod("getDescriptor");
         var params = (Descriptors.Descriptor) descriptor.invoke(null);
         final var methodName = Introspector.decapitalize(serviceName);
-        var unaryStaticExecMethod = source.addMethod().setPublic().setStatic(true).setReturnType(responseType).setName(methodName);
+        var unaryStaticExecMethod = source.addMethod().setPublic().setReturnType(responseType).setName(methodName);
         var setterList = new ArrayList<String>();
         params.getFields().forEach(field -> {
             var paramName = Introspector.decapitalize(makeJavaName(field.getName()));
@@ -275,7 +285,11 @@ public class RPCActionsGenerator {
         var bodyBuilder = new StringBuilder();
         bodyBuilder
                 .append("        var service = new ").append(serviceName).append("();\n")
-                .append("        service.clientBuilder.addHeader(\"authorization\", \"Bearer \");\n");
+                .append("        if (!clientMod.isEmpty()) {\n")
+                .append("            clientMod.forEach(c -> c.accept(service.clientBuilder));\n")
+                .append("        } else {\n")
+                .append("            RPCGlobals.defaultClientMod.forEach(c -> c.accept(service.clientBuilder));\n")
+                .append("        }\n");
         if (!setterList.isEmpty()) {
             bodyBuilder.append( "        service.requestBuilder");
             setterList.forEach(bodyBuilder::append);
