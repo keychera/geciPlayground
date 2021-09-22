@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package self.chera;
+import "google/protobuf/empty.proto";
+
+option java_package = "self.chera.proto";
+
+message Map {
+  uint64 id = 1;
+  string name = 2;
+  bool is_treasure = 3;
+  float coordinate = 4;
+  double amount = 5;
+  int32 ref = 6;
+  bytes pixel = 7;
+}
+
+message Treasure {
+  bool status = 1;
+}
+
+message Dragon {
+  uint64 AEGIS = 1;
+  repeated string name = 2;
+  bool isCool = 3;
+  string Species = 4;
+  map<string, float> magicRepertoire = 5;
+  DragonFamily family = 6;
+  enum Element {
+    FIRE = 0;
+    WATER = 1;
+    AIR = 2;
+    EARTH = 3;
+  }
+  Element naturalElement = 7;
+  Treasure treasure = 8;
+}
+
+enum DragonFamily {
+  NORMAL = 0;
+  QUETZALCOATL = 1;
+  WYVERN = 2;
+  HYDRA = 3;
+  COCKATRICE = 4;
+}
+
+message Ocean {
+  repeated uint64 id = 1;
+  repeated string name = 2;
+  repeated bool contains_treasures = 3;
+  repeated float coordinates = 4;
+  repeated double amounts = 5;
+  repeated int32 refs = 6;
+  repeated bytes pixels = 7;
+  repeated Dragon dragons = 8;
+  repeated DragonFamily families = 9;
+  repeated Random randomness = 10;
+  enum Random {
+    YES = 0;
+    NO = 1;
+  }
+}
+
+service TakaraKaneHandler {
+  rpc SubmergeShip(Map) returns (Treasure) {};
+  rpc Unearth(google.protobuf.Empty) returns (Treasure) {};
+  rpc Lavish(Treasure) returns (google.protobuf.Empty) {};
+  rpc Fight(Dragon) returns (Treasure) {};
+  rpc SailThe(Ocean) returns (Treasure) {};
+}

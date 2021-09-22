@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package self.chera;
+
+option java_package = "self.chera.proto";
+
+message AncientRequest {
+  uint64 count = 1;
+  string name = 2;
+}
+message FuturisticResponse {
+  bool status = 1;
+}
+
+service DeprecationHandler {
+  rpc ToBeDeprecated(AncientRequest) returns (FuturisticResponse) {};
+  rpc AlsoDeprecated(AncientRequest) returns (FuturisticResponse) {};
+}
