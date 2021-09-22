@@ -6,7 +6,7 @@ import com.google.protobuf.Descriptors.FieldDescriptor.JavaType;
 import com.google.protobuf.GeneratedMessageV3;
 import com.linecorp.armeria.client.ClientBuilder;
 import com.linecorp.armeria.client.Clients;
-import self.chera.grpc.GRPCClass;
+import self.chera.grpc.RPCClass;
 import self.chera.grpc.RPCAction;
 import self.chera.grpc.RPCGlobals;
 import self.chera.grpc.RPCStream;
@@ -64,8 +64,8 @@ public class RPCActionsGenerator {
             final JavaClassSource rpcActionsClass = Roaster.create(JavaClassSource.class);
             rpcActionsClass.setPackage(GENERATED_PACKAGE).setName(className);
 
-            rpcActionsClass.addImport(GRPCClass.class);
-            rpcActionsClass.setSuperType(String.format("%s<%s>", GRPCClass.class.getName(), className));
+            rpcActionsClass.addImport(RPCClass.class);
+            rpcActionsClass.setSuperType(String.format("%s<%s>", RPCClass.class.getName(), className));
 
             rpcActionsClass.addMethod().setConstructor(true).setPrivate().setBody("");
 

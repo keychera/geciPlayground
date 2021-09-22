@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 @SuppressWarnings("unchecked")
-public class GRPCClass<T> {
+public class RPCClass<T> {
     protected static List<Consumer<ClientBuilder>> clientMod = new ArrayList<>();
 
     public T header(Consumer<ClientBuilder> headerMod) {
