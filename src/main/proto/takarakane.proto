@@ -44,9 +44,27 @@ enum DragonFamily {
   COCKATRICE = 4;
 }
 
+message Ocean {
+  repeated uint64 id = 1;
+  repeated string name = 2;
+  repeated bool contains_treasures = 3;
+  repeated float coordinates = 4;
+  repeated double amounts = 5;
+  repeated int32 refs = 6;
+  repeated bytes pixels = 7;
+  repeated Dragon dragons = 8;
+  repeated DragonFamily families = 9;
+  repeated Random randomness = 10;
+  enum Random {
+    YES = 0;
+    NO = 1;
+  }
+}
+
 service TakaraKaneHandler {
   rpc SubmergeShip(Map) returns (Treasure) {};
   rpc Unearth(google.protobuf.Empty) returns (Treasure) {};
   rpc Lavish(Treasure) returns (google.protobuf.Empty) {};
   rpc Fight(Dragon) returns (Treasure) {};
+  rpc SailThe(Ocean) returns (Treasure) {};
 }

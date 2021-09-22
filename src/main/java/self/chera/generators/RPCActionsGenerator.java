@@ -235,37 +235,42 @@ public class RPCActionsGenerator {
             var paramName = Introspector.decapitalize(makeJavaName(field.getName()));
             var type = mapType(field.getJavaType());
 
+            String setterName;
             if (field.isMapField()) { // mapField is also a repeatedField
                 var mapInfo = field.getMessageType().getFields();
                 var keyType = mapType(mapInfo.get(0).getJavaType());
                 var valueType = mapType(mapInfo.get(1).getJavaType());
-                unaryStaticExecMethod.addParameter(String.format("%s<%s, %s>", Map.class.getCanonicalName(), keyType, valueType), paramName);
-                var setterName = "putAll" + makeJavaName(field.getName());
-                setterList.add(String.format(".%s(%s)", setterName, paramName));
-            } else if (field.getType() == Descriptors.FieldDescriptor.Type.ENUM) {
-                var enumType = field.getEnumType().getName();
-                // a kinda dirty solution to resolve enum inside a request and outside the request. not yet handling deeper layer or imported enum
-                var container = field.getEnumType().getContainingType();
-                if (container != null) {
-                    enumType = String.format("%s.%s", container.getName(), enumType);
+                var paramType = String.format("%s<%s, %s>", Map.class.getCanonicalName(), keyType, valueType);
+                unaryStaticExecMethod.addParameter(paramType, paramName);
+                setterName = "putAll" + makeJavaName(field.getName());
+            } else  {
+                var repeated = field.isRepeated();
+                if (repeated) {
+                    setterName = "addAll" + makeJavaName(field.getName());
+                    source.addImport(List.class);
+                } else {
+                    setterName = "set" + makeJavaName(field.getName());
                 }
-                unaryStaticExecMethod.addParameter(String.format("%s.%s", protoClass.getCanonicalName(), enumType), paramName);
-                var setterName = "set" + makeJavaName(field.getName());
-                setterList.add(String.format(".%s(%s)", setterName, paramName));
-            } else if (field.isRepeated()) {
-                unaryStaticExecMethod.addParameter(String.format("%s<%s>", List.class.getCanonicalName(), type), paramName);
-                var setterName = "addAll" + makeJavaName(field.getName());
-                setterList.add(String.format(".%s(%s)", setterName, paramName));
-            } else if (field.getType() == Descriptors.FieldDescriptor.Type.MESSAGE) {
-                var messageType = field.getMessageType().getName();
-                unaryStaticExecMethod.addParameter(String.format("%s.%s", protoClass.getCanonicalName(), messageType), paramName);
-                var setterName = "set" + makeJavaName(field.getName());
-                setterList.add(String.format(".%s(%s)", setterName, paramName));
-            } else {
-                unaryStaticExecMethod.addParameter(type, paramName);
-                var setterName = "set" + makeJavaName(field.getName());
-                setterList.add(String.format(".%s(%s)", setterName, paramName));
+
+                String paramType;
+                if (field.getType() == Descriptors.FieldDescriptor.Type.ENUM) {
+                    var enumType = field.getEnumType().getName();
+                    // a kinda dirty solution to resolve enum inside a request and outside the request. not yet handling deeper layer or imported enum
+                    var container = field.getEnumType().getContainingType();
+                    if (container != null) {
+                        enumType = String.format("%s.%s", container.getName(), enumType);
+                    }
+                    paramType = String.format("%s.%s", protoClass.getCanonicalName(), enumType);
+                }  else if (field.getType() == Descriptors.FieldDescriptor.Type.MESSAGE) {
+                    var messageType = field.getMessageType().getName();
+                    paramType = String.format("%s.%s", protoClass.getCanonicalName(), messageType);
+                } else {
+                    paramType = type;
+                }
+                paramType = resolveTypeIfRepeated(repeated, paramType);
+                unaryStaticExecMethod.addParameter(paramType, paramName);
             }
+            setterList.add(String.format(".%s(%s)", setterName, paramName));
         });
         var bodyBuilder = new StringBuilder();
         bodyBuilder
@@ -421,6 +426,14 @@ public class RPCActionsGenerator {
 
     private static String mapType(JavaType javaType) {
         return TYPE_MAPPING.getOrDefault(javaType, "Object");
+    }
+
+    private static String resolveTypeIfRepeated(boolean repeated, String type) {
+        if (repeated) {
+            return String.format("List<%s>", type);
+        } else {
+            return type;
+        }
     }
 
     private static final Map<JavaType, String> TYPE_MAPPING = Map.of(
