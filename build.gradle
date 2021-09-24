@@ -58,6 +58,7 @@ dependencies {
 
     // for annotations processing
     implementation group: 'com.google.auto.service', name: 'auto-service', version: '1.0'
+    annotationProcessor group: 'com.google.auto.service', name: 'auto-service', version: '1.0'
 
     // testng
     testImplementation group: 'org.testng', name: 'testng', version: '7.3.0'

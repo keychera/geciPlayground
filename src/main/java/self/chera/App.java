@@ -11,7 +11,9 @@ import java.util.List;
  */
 public class App
 {
-    private int example;
+    public static String sayHello() {
+        return "HelloQA";
+    }
 
     public static void main( String[] args )
     {

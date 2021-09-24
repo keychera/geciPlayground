@@ -1,11 +1,15 @@
 package self.chera.annotations;
 
 import com.google.auto.service.AutoService;
+import org.jboss.forge.roaster.Roaster;
+import org.jboss.forge.roaster.model.source.JavaClassSource;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.ExecutableType;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -16,13 +20,30 @@ public class CodegenProcessor extends AbstractProcessor {
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-        for (TypeElement annotation : annotations) {
+        for (var annotation: annotations) {
             var annotatedElements = roundEnv.getElementsAnnotatedWith(annotation);
-
-            var annotatedMethods = annotatedElements.stream()
-                    .collect(Collectors.partitioningBy(element -> ((ExecutableType) element.asType()).getParameterTypes().size() == 1 && element.getSimpleName().toString().startsWith("set")));
-
+            if (annotatedElements.isEmpty()) {
+                continue;
+            }
+            try {
+                writeClass();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
-        return false;
+        return true;
+    }
+
+    private void writeClass() throws IOException {
+        var name = "HeyQA";
+        final var someClass = Roaster.create(JavaClassSource.class);
+        someClass.setName(name).setPackage("self.chera.generated")
+                .addMethod().setStatic(true).setPublic().setName("Hmm").setReturnType(String.class).setBody("return \"Hello Annotation!\";");
+
+        var builderFile = processingEnv.getFiler()
+                .createSourceFile(name);
+        try (var out = new PrintWriter(builderFile.openWriter())) {
+            out.println(someClass);
+        }
     }
 }
