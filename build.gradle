@@ -56,6 +56,9 @@ dependencies {
     api group: "io.grpc", name: "grpc-stub", version: grpcVersion
     compileOnly group: "org.apache.tomcat", name: "annotations-api", version: "6.0.53"
 
+    // for annotations processing
+    implementation group: 'com.google.auto.service', name: 'auto-service', version: '1.0'
+
     // testng
     testImplementation group: 'org.testng', name: 'testng', version: '7.3.0'
 }
