@@ -380,6 +380,13 @@ public class RPCActionsGenerator {
         return handlers;
     }
 
+    private static List<File> listAllFiles(String directoryName) throws IOException {
+        return Files.walk(Path.of(directoryName))
+                .filter(Files::isRegularFile)
+                .map(Path::toFile)
+                .collect(Collectors.toUnmodifiableList());
+    }
+
     private static void prepareGeneratedFolder() {
         try {
             packageFolderName = targetLocation + "/" + GENERATED_PACKAGE.replace(".", "/");
@@ -413,21 +420,7 @@ public class RPCActionsGenerator {
         return getDotSimpleName(String.format("%s.Builder", simpleName));
     }
 
-    private static List<File> listAllFiles(String directoryName) {
-        File directory = new File(directoryName);
-        List<File> res = new ArrayList<>();
-        File[] fList = directory.listFiles();
-        if (fList != null) {
-            for (File file : fList) {
-                if (file.isFile()) {
-                    res.add(file);
-                } else if (file.isDirectory()) {
-                    res.addAll(listAllFiles(file.getAbsolutePath()));
-                }
-            }
-        }
-        return res;
-    }
+
 
     private static String mapType(Descriptors.FieldDescriptor.JavaType javaType) {
         return TYPE_MAPPING.getOrDefault(javaType, "Object");
