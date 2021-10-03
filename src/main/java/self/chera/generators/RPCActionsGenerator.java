@@ -2,19 +2,13 @@ package self.chera.generators;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Descriptors;
-import com.google.protobuf.Descriptors.FieldDescriptor.JavaType;
 import com.google.protobuf.GeneratedMessageV3;
-import com.linecorp.armeria.client.ClientBuilder;
-import com.linecorp.armeria.client.Clients;
-import self.chera.grpc.RPCClass;
-import self.chera.grpc.RPCAction;
-import self.chera.grpc.RPCGlobals;
-import self.chera.grpc.RPCStream;
 import io.grpc.MethodDescriptor;
 import io.grpc.stub.StreamObserver;
 import org.jboss.forge.roaster.ParserException;
 import org.jboss.forge.roaster.Roaster;
 import org.jboss.forge.roaster.model.source.JavaClassSource;
+import self.chera.grpc.*;
 
 import java.beans.Introspector;
 import java.io.*;
@@ -33,7 +27,6 @@ import java.util.stream.Collectors;
 public class RPCActionsGenerator {
     // configurable
     private static final String GENERATED_PACKAGE = "self.chera.generated.grpc";
-    private static final String PROTO_URL_LITERAL = "Clients.builder(RPCGlobals.defaultUrl.get());";
     private static final List<String> classesToDeprecate = List.of(
             "DeprecationGrpc.ToBeDeprecated",
             "DeprecationGrpc.AlsoDeprecated"
@@ -201,15 +194,16 @@ public class RPCActionsGenerator {
             // Parent RPC Action class
             final JavaClassSource parentRpcAction = Roaster.create(JavaClassSource.class);
 
-            parentRpcAction.setName(UNARY_PARENT_CLASS).setPrivate().setStatic(true).setAbstract(true).addTypeVariable("Req").setBounds(GeneratedMessageV3.class).getOrigin().addTypeVariable("Res")
-                    .setBounds(GeneratedMessageV3.class).getOrigin().setSuperType("RPCAction<Req, Res>").addField().setName("clientBuilder").setPublic().setType(ClientBuilder.class)
-                    .setLiteralInitializer(PROTO_URL_LITERAL).getOrigin().addMethod().setName("getClient").setProtected().setReturnType(wrapper.blockingStubClass)
+            parentRpcAction.setName(UNARY_PARENT_CLASS).setPrivate().setStatic(true).setAbstract(true)
+                    .addTypeVariable("Req").setBounds(GeneratedMessageV3.class).getOrigin()
+                    .addTypeVariable("Res").setBounds(GeneratedMessageV3.class).getOrigin()
+                    .setSuperType("RPCAction<Req, Res>")
+                    .addMethod().setName("getClient").setProtected().setReturnType(wrapper.blockingStubClass)
                     .setBody(String.format("return clientBuilder.build(%1$s.class);", wrapper.blockingStubClass.getSimpleName()));
 
             targetSource.addImport(GeneratedMessageV3.class);
             targetSource.addImport(RPCAction.class);
-            targetSource.addImport(ClientBuilder.class);
-            targetSource.addImport(Clients.class);
+            targetSource.addImport(RPCClientBuilder.class);
             targetSource.addImport(wrapper.blockingStubClass);
             targetSource.addNestedType(parentRpcAction);
         }
@@ -220,22 +214,23 @@ public class RPCActionsGenerator {
             // Parent RPC Action class
             final JavaClassSource parentRpcAction = Roaster.create(JavaClassSource.class);
 
-            parentRpcAction.setName(CLIENT_STREAM_PARENT_CLASS).setPrivate().setStatic(true).setAbstract(true).addTypeVariable("Req").setBounds(GeneratedMessageV3.class).getOrigin()
-                    .addTypeVariable("Res").setBounds(GeneratedMessageV3.class).getOrigin().setSuperType("RPCStream<Req, Res>").addField().setName("clientBuilder").setPublic()
-                    .setType(ClientBuilder.class).setLiteralInitializer(PROTO_URL_LITERAL).getOrigin().addMethod().setName("getClient").setProtected()
-                    .setReturnType(wrapper.stubClass).setBody(String.format("return clientBuilder.responseTimeoutMillis(10000).build(%s.class);", wrapper.stubClass.getSimpleName()));
+            parentRpcAction.setName(CLIENT_STREAM_PARENT_CLASS).setPrivate().setStatic(true).setAbstract(true)
+                    .addTypeVariable("Req").setBounds(GeneratedMessageV3.class).getOrigin()
+                    .addTypeVariable("Res").setBounds(GeneratedMessageV3.class).getOrigin()
+                    .setSuperType("RPCStream<Req, Res>")
+                    .addMethod().setName("getClient").setProtected().setReturnType(wrapper.stubClass)
+                    .setBody(String.format("return clientBuilder.responseTimeoutMillis(10000).build(%s.class);", wrapper.stubClass.getSimpleName()));
 
             targetSource.addImport(GeneratedMessageV3.class);
             targetSource.addImport(RPCStream.class);
-            targetSource.addImport(ClientBuilder.class);
-            targetSource.addImport(Clients.class);
+            targetSource.addImport(RPCClientBuilder.class);
             targetSource.addImport(wrapper.stubClass);
             targetSource.addNestedType(parentRpcAction);
         }
     }
 
     private static void addUnaryExec(JavaClassSource source, Class<?> protoClass, String serviceName, Class<?> requestType,
-                                     Class<?> responseType) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+            Class<?> responseType) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         var descriptor = requestType.getMethod("getDescriptor");
         var params = (Descriptors.Descriptor) descriptor.invoke(null);
         final var methodName = Introspector.decapitalize(serviceName);
@@ -253,7 +248,7 @@ public class RPCActionsGenerator {
                 var paramType = String.format("%s<%s, %s>", Map.class.getCanonicalName(), keyType, valueType);
                 unaryStaticExecMethod.addParameter(paramType, paramName);
                 setterName = "putAll" + makeJavaName(field.getName());
-            } else  {
+            } else {
                 var repeated = field.isRepeated();
                 if (repeated) {
                     setterName = "addAll" + makeJavaName(field.getName());
@@ -271,7 +266,7 @@ public class RPCActionsGenerator {
                         enumType = String.format("%s.%s", container.getName(), enumType);
                     }
                     paramType = String.format("%s.%s", protoClass.getCanonicalName(), enumType);
-                }  else if (field.getType() == Descriptors.FieldDescriptor.Type.MESSAGE) {
+                } else if (field.getType() == Descriptors.FieldDescriptor.Type.MESSAGE) {
                     var messageType = field.getMessageType().getName();
                     paramType = String.format("%s.%s", protoClass.getCanonicalName(), messageType);
                 } else {
@@ -285,15 +280,11 @@ public class RPCActionsGenerator {
         var bodyBuilder = new StringBuilder();
         bodyBuilder
                 .append("        var service = new ").append(serviceName).append("();\n")
-                .append("        if (!clientMod.isEmpty()) {\n")
-                .append("            clientMod.forEach(c -> c.accept(service.clientBuilder));\n")
-                .append("        } else {\n")
-                .append("            RPCGlobals.defaultClientMod.forEach(c -> c.accept(service.clientBuilder));\n")
-                .append("        }\n");
+                .append("        clientMod.forEach(c -> c.accept(service.clientBuilder));\n");
         if (!setterList.isEmpty()) {
-            bodyBuilder.append( "        service.requestBuilder");
+            bodyBuilder.append("        service.requestBuilder");
             setterList.forEach(bodyBuilder::append);
-            bodyBuilder.append( ";\n");
+            bodyBuilder.append(";\n");
         }
         bodyBuilder.append(
                 "        return service.exec();"
@@ -438,7 +429,7 @@ public class RPCActionsGenerator {
         return res;
     }
 
-    private static String mapType(JavaType javaType) {
+    private static String mapType(Descriptors.FieldDescriptor.JavaType javaType) {
         return TYPE_MAPPING.getOrDefault(javaType, "Object");
     }
 
@@ -450,13 +441,13 @@ public class RPCActionsGenerator {
         }
     }
 
-    private static final Map<JavaType, String> TYPE_MAPPING = Map.of(
-            JavaType.INT, Integer.class.getSimpleName(),
-            JavaType.LONG, Long.class.getSimpleName(),
-            JavaType.FLOAT, Float.class.getSimpleName(),
-            JavaType.DOUBLE, Double.class.getSimpleName(),
-            JavaType.BOOLEAN, Boolean.class.getSimpleName(),
-            JavaType.STRING, String.class.getSimpleName(),
-            JavaType.BYTE_STRING, ByteString.class.getCanonicalName()
+    private static final Map<Descriptors.FieldDescriptor.JavaType, String> TYPE_MAPPING = Map.of(
+            Descriptors.FieldDescriptor.JavaType.INT, Integer.class.getSimpleName(),
+            Descriptors.FieldDescriptor.JavaType.LONG, Long.class.getSimpleName(),
+            Descriptors.FieldDescriptor.JavaType.FLOAT, Float.class.getSimpleName(),
+            Descriptors.FieldDescriptor.JavaType.DOUBLE, Double.class.getSimpleName(),
+            Descriptors.FieldDescriptor.JavaType.BOOLEAN, Boolean.class.getSimpleName(),
+            Descriptors.FieldDescriptor.JavaType.STRING, String.class.getSimpleName(),
+            Descriptors.FieldDescriptor.JavaType.BYTE_STRING, ByteString.class.getCanonicalName()
     );
 }

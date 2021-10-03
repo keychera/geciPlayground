@@ -3,23 +3,17 @@ package self.chera.grpc;
 import com.google.protobuf.GeneratedMessageV3;
 import io.grpc.StatusRuntimeException;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.ServiceLoader;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
+import static self.chera.grpc.RPCGlobals.rpcActionListeners;
+
 public abstract class RPCAction<Req extends GeneratedMessageV3, Res extends GeneratedMessageV3> {
-    private static List<RPCActionListener> rpcActionListeners = null;
     private String stepName;
+    public RPCClientBuilder clientBuilder = new RPCClientBuilder();
     public UnaryOperator<String> stepNameModifier = str -> str;
 
     protected RPCAction() {
-        if (rpcActionListeners == null) {
-            rpcActionListeners = new ArrayList<>();
-            var rpcActionListenerServiceLoader = ServiceLoader.load(RPCActionListener.class);
-            rpcActionListenerServiceLoader.iterator().forEachRemaining(listener -> rpcActionListeners.add(listener));
-        }
         stepName = getClass().getSimpleName();
     }
 
@@ -30,19 +24,16 @@ public abstract class RPCAction<Req extends GeneratedMessageV3, Res extends Gene
 
     private Res exec(String actionName) {
         Req request = getRequest();
-        rpcActionListeners.forEach(listener -> listener.requestListener(actionName, request));
-
         Function<Req, Res> action = getAction();
         Res response;
         try {
             response = action.apply(request);
         } catch (StatusRuntimeException sre) {
-            rpcActionListeners.forEach(listener -> listener.failureListener(actionName, sre));
-            throw new RPCException(sre, actionName, request);
+            var exc = new RPCException(sre, actionName, request);
+            rpcActionListeners.forEach(listener -> listener.failureListener(actionName, request, exc));
+            throw exc;
         }
-        Res finalResponse = response;
-        rpcActionListeners.forEach(listener -> listener.responseListener(actionName, finalResponse));
-
+        rpcActionListeners.forEach(listener -> listener.responseListener(actionName, request, response));
         return response;
     }
 

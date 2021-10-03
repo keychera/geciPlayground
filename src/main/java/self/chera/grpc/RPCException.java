@@ -18,7 +18,7 @@ public class RPCException extends StatusRuntimeException {
         return String.format("proto [%s] error! message: %s", stepName, super.getMessage());
     }
 
-    public String getActualMessage() {
+    public String getGrpcErrorMessage() {
         return super.getMessage();
     }
 }

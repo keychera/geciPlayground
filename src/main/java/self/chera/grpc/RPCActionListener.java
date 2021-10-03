@@ -3,12 +3,15 @@ package self.chera.grpc;
 import com.google.protobuf.GeneratedMessageV3;
 
 public interface RPCActionListener {
-    default void requestListener(String actionName, GeneratedMessageV3 request) {
+    default void responseListener(String actionName, GeneratedMessageV3 request, GeneratedMessageV3 response) {
     }
 
-    default void responseListener(String actionName, GeneratedMessageV3 response) {
+    default void failureListener(String actionName, GeneratedMessageV3 request, RPCException exception) {
     }
 
-    default void failureListener(String actionName, Exception exception) {
+    default void addHeaderListener(CharSequence name, Object value) {
+    }
+
+    default void setHeaderListener(CharSequence name, Object value) {
     }
 }
