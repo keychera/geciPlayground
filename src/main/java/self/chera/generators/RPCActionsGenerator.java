@@ -126,7 +126,7 @@ public class RPCActionsGenerator {
 
                         serviceClassToAdd = unaryActionClass;
                         try {
-                            addUnaryExec(rpcActionsClass, protoClass, serviceName, requestType, responseType);
+                            addStaticUnaryExec(rpcActionsClass, protoClass, serviceName, requestType, responseType);
                         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
                             e.printStackTrace();
                             System.err.printf("not adding static exec method for service: %s%n", serviceName);
@@ -253,26 +253,22 @@ public class RPCActionsGenerator {
         }
     }
 
-    private static void addUnaryExec(
-            JavaClassSource source, Class<?> protoClass, String serviceName, Class<?> requestType,
-            Class<?> responseType
+    private static void addStaticUnaryExec(
+            JavaClassSource source, Class<?> protoClass, String serviceName, Class<?> requestType, Class<?> responseType
     ) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        var descriptor = requestType.getMethod("getDescriptor");
-        var params = (Descriptors.Descriptor) descriptor.invoke(null);
-        final var methodName = Introspector.decapitalize(serviceName);
-        var unaryStaticExecMethod = source.addMethod().setPublic().setReturnType(responseType).setName(methodName);
-        var setterList = new ArrayList<String>();
-        params.getFields().forEach(field -> {
-            var paramName = Introspector.decapitalize(makeJavaName(field.getName()));
-            var type = mapType(field.getJavaType());
+        var methodName = Introspector.decapitalize(serviceName);
+        var params = (Descriptors.Descriptor) requestType.getMethod("getDescriptor").invoke(null);
 
-            String setterName;
+        var unaryStaticExecMethod = source
+                .addMethod().setPublic().setReturnType(responseType).setName(methodName);
+
+        var setterList = params.getFields().stream().map(field -> {
+            String paramType, setterName;
             if (field.isMapField()) { // mapField is also a repeatedField
                 var mapInfo = field.getMessageType().getFields();
                 var keyType = mapType(mapInfo.get(0).getJavaType());
                 var valueType = mapType(mapInfo.get(1).getJavaType());
-                var paramType = String.format("%s<%s, %s>", Map.class.getCanonicalName(), keyType, valueType);
-                unaryStaticExecMethod.addParameter(paramType, paramName);
+                paramType = String.format("%s<%s, %s>", Map.class.getCanonicalName(), keyType, valueType);
                 setterName = "putAll" + makeJavaName(field.getName());
             } else {
                 var repeated = field.isRepeated();
@@ -282,8 +278,6 @@ public class RPCActionsGenerator {
                 } else {
                     setterName = "set" + makeJavaName(field.getName());
                 }
-
-                String paramType;
                 if (field.getType() == Descriptors.FieldDescriptor.Type.ENUM) {
                     var enumType = field.getEnumType().getName();
                     // a kinda dirty solution to resolve enum inside a request and outside the request. not yet handling deeper layer or imported enum
@@ -296,13 +290,16 @@ public class RPCActionsGenerator {
                     var messageType = field.getMessageType().getName();
                     paramType = String.format("%s.%s", protoClass.getCanonicalName(), messageType);
                 } else {
-                    paramType = type;
+                    paramType =  mapType(field.getJavaType());
                 }
                 paramType = resolveTypeIfRepeated(repeated, paramType);
-                unaryStaticExecMethod.addParameter(paramType, paramName);
             }
-            setterList.add(String.format(".%s(%s)", setterName, paramName));
-        });
+
+            var paramName = Introspector.decapitalize(makeJavaName(field.getName()));
+            unaryStaticExecMethod.addParameter(paramType, paramName);
+            return String.format(".%s(%s)", setterName, paramName);
+        }).collect(Collectors.toList());
+
         var bodyBuilder = new StringBuilder();
         bodyBuilder
                 .append("        var service = new ").append(serviceName).append("();\n")
@@ -333,8 +330,10 @@ public class RPCActionsGenerator {
                     return getPackageDir(packageName).stream()
                             .flatMap(packageDir -> streamAllFiles(packageDir, ".class")
                                     .filter(isFileRelevant(serviceName, protoJavaName))
-                                    .flatMap(classFile -> GrpcClassInfo.resolve(packageName, protoFile, classFile).stream()
-                                            .filter(GrpcClassInfo::isNecessary)
+                                    .flatMap(classFile -> GrpcClassInfo.resolve(packageName, protoFile,
+                                            classFile
+                                            ).stream()
+                                                    .filter(GrpcClassInfo::isNecessary)
                                     )
                             );
                 }).collect(Collectors.groupingBy(GrpcClassInfo::getHandlerName));
@@ -527,6 +526,7 @@ public class RPCActionsGenerator {
         private final String className;
 
         private final String handlerName;
+
         public String getHandlerName() {
             return handlerName;
         }
