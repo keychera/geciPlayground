@@ -20,9 +20,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.function.Function;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class RPCActionsGenerator {
     // configurable
@@ -68,7 +70,8 @@ public class RPCActionsGenerator {
 
             // each grpc service class
             Class<?> handler = wrapper.handlerGrpcClass;
-            List<Field> allMethodDescriptor = Arrays.stream(handler.getDeclaredFields()).filter(t -> t.getType().isAssignableFrom(MethodDescriptor.class)).collect(Collectors.toList());
+            List<Field> allMethodDescriptor = Arrays.stream(handler.getDeclaredFields()).filter(
+                    t -> t.getType().isAssignableFrom(MethodDescriptor.class)).collect(Collectors.toList());
             for (Field declaredField : allMethodDescriptor) {
                 ParameterizedType types;
                 String serviceName;
@@ -89,7 +92,10 @@ public class RPCActionsGenerator {
                 Class<?> responseType = (Class<?>) types.getActualTypeArguments()[1];
                 String requestTypeName = requestType.getTypeName().replace("$", ".");
                 String responseTypeName = responseType.getTypeName().replace("$", ".");
-                System.out.printf("Adding service (%s) class %s, req: %s res: %s%n", serviceType.name(), serviceName, requestTypeName, responseTypeName);
+                System.out.printf(
+                        "Adding service (%s) class %s, req: %s res: %s%n", serviceType.name(), serviceName,
+                        requestTypeName, responseTypeName
+                );
 
                 rpcActionsClass.addImport(protoClass);
                 if (!requestTypeName.contains(protoPackage)) {
@@ -111,11 +117,21 @@ public class RPCActionsGenerator {
                         dot_builderTypeName = getDotBuilderTypeName(protoPackage, requestTypeName);
 
                         final JavaClassSource unaryActionClass = Roaster.create(JavaClassSource.class);
-                        unaryActionClass.setName(serviceName).setPublic().setStatic(true).setSuperType(String.format("%s<%s,%s>", UNARY_PARENT_CLASS, dot_requestTypeName, dot_responseTypeName))
-                                .addField().setName("requestBuilder").setPublic().setType(dot_builderTypeName).setLiteralInitializer(String.format("%s.newBuilder();", dot_requestTypeName)).getOrigin()
-                                .addMethod().setName("getRequest").setProtected().setReturnType(dot_requestTypeName).setBody("return requestBuilder.build();").getOrigin().addMethod()
-                                .setName("getAction").setProtected().setReturnType(String.format("Function<%s,%s>", dot_requestTypeName, dot_responseTypeName))
-                                .setBody(String.format("return (req) -> getClient().%s(req);", lowercaseFirstLetter(serviceName))).getOrigin();
+                        unaryActionClass.setName(serviceName).setPublic().setStatic(true).setSuperType(
+                                String.format("%s<%s,%s>", UNARY_PARENT_CLASS, dot_requestTypeName,
+                                        dot_responseTypeName
+                                ))
+                                .addField().setName("requestBuilder").setPublic().setType(
+                                dot_builderTypeName).setLiteralInitializer(
+                                String.format("%s.newBuilder();", dot_requestTypeName)).getOrigin()
+                                .addMethod().setName("getRequest").setProtected().setReturnType(
+                                dot_requestTypeName).setBody("return requestBuilder.build();").getOrigin().addMethod()
+                                .setName("getAction").setProtected().setReturnType(
+                                String.format("Function<%s,%s>", dot_requestTypeName, dot_responseTypeName))
+                                .setBody(String.format(
+                                        "return (req) -> getClient().%s(req);",
+                                        lowercaseFirstLetter(serviceName)
+                                )).getOrigin();
 
                         serviceClassToAdd = unaryActionClass;
                         try {
@@ -133,12 +149,23 @@ public class RPCActionsGenerator {
 
                         final JavaClassSource clientStreamActionClass = Roaster.create(JavaClassSource.class);
                         clientStreamActionClass.setName(serviceName).setPublic().setStatic(true)
-                                .setSuperType(String.format("%s<%s,%s>", CLIENT_STREAM_PARENT_CLASS, dot_requestTypeName, dot_responseTypeName)).addField().setName("requestBuilder").setPublic()
-                                .setType(dot_builderTypeName).setLiteralInitializer(String.format("%s.newBuilder();", dot_requestTypeName)).getOrigin().addMethod().setName("getRequest").setProtected()
-                                .setReturnType(dot_requestTypeName).setBody("var req = requestBuilder.build(); requestBuilder.clear(); return req;").getOrigin().addMethod()
-                                .setName("getRequestStreamAction").setProtected().setReturnType(String.format("Function<StreamObserver<%s>,StreamObserver<%s>>", dot_responseTypeName,
-                                // switched response and request position for ClientStream
-                                dot_requestTypeName)).setBody(String.format("return (resStream) -> getClient().%s(resStream);", lowercaseFirstLetter(serviceName))).getOrigin();
+                                .setSuperType(
+                                        String.format("%s<%s,%s>", CLIENT_STREAM_PARENT_CLASS, dot_requestTypeName,
+                                                dot_responseTypeName
+                                        )).addField().setName("requestBuilder").setPublic()
+                                .setType(dot_builderTypeName).setLiteralInitializer(
+                                String.format("%s.newBuilder();", dot_requestTypeName)).getOrigin().addMethod().setName(
+                                "getRequest").setProtected()
+                                .setReturnType(dot_requestTypeName).setBody(
+                                "var req = requestBuilder.build(); requestBuilder.clear(); return req;").getOrigin().addMethod()
+                                .setName("getRequestStreamAction").setProtected().setReturnType(
+                                String.format("Function<StreamObserver<%s>,StreamObserver<%s>>", dot_responseTypeName,
+                                        // switched response and request position for ClientStream
+                                        dot_requestTypeName
+                                )).setBody(String.format(
+                                "return (resStream) -> getClient().%s(resStream);",
+                                lowercaseFirstLetter(serviceName)
+                        )).getOrigin();
 
                         rpcActionsClass.addImport(StreamObserver.class);
                         serviceClassToAdd = clientStreamActionClass;
@@ -199,7 +226,10 @@ public class RPCActionsGenerator {
                     .addTypeVariable("Res").setBounds(GeneratedMessageV3.class).getOrigin()
                     .setSuperType("RPCAction<Req, Res>")
                     .addMethod().setName("getClient").setProtected().setReturnType(wrapper.blockingStubClass)
-                    .setBody(String.format("return clientBuilder.build(%1$s.class);", wrapper.blockingStubClass.getSimpleName()));
+                    .setBody(String.format(
+                            "return clientBuilder.build(%1$s.class);",
+                            wrapper.blockingStubClass.getSimpleName()
+                    ));
 
             targetSource.addImport(GeneratedMessageV3.class);
             targetSource.addImport(RPCAction.class);
@@ -219,7 +249,10 @@ public class RPCActionsGenerator {
                     .addTypeVariable("Res").setBounds(GeneratedMessageV3.class).getOrigin()
                     .setSuperType("RPCStream<Req, Res>")
                     .addMethod().setName("getClient").setProtected().setReturnType(wrapper.stubClass)
-                    .setBody(String.format("return clientBuilder.responseTimeoutMillis(10000).build(%s.class);", wrapper.stubClass.getSimpleName()));
+                    .setBody(String.format(
+                            "return clientBuilder.responseTimeoutMillis(10000).build(%s.class);",
+                            wrapper.stubClass.getSimpleName()
+                    ));
 
             targetSource.addImport(GeneratedMessageV3.class);
             targetSource.addImport(RPCStream.class);
@@ -229,8 +262,10 @@ public class RPCActionsGenerator {
         }
     }
 
-    private static void addUnaryExec(JavaClassSource source, Class<?> protoClass, String serviceName, Class<?> requestType,
-            Class<?> responseType) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    private static void addUnaryExec(
+            JavaClassSource source, Class<?> protoClass, String serviceName, Class<?> requestType,
+            Class<?> responseType
+    ) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         var descriptor = requestType.getMethod("getDescriptor");
         var params = (Descriptors.Descriptor) descriptor.invoke(null);
         final var methodName = Introspector.decapitalize(serviceName);
@@ -294,42 +329,16 @@ public class RPCActionsGenerator {
 
     private static Map<String, HandlerWrapper> getListOfProtoHandler(String protoFolder) throws IOException {
         Map<String, HandlerWrapper> handlers = new HashMap<>();
-        Set<String> allProtoPackage = new HashSet<>();
-        HashMap<String, String> allProtoJavaName = new HashMap<>();
 
-        List<File> protoFiles = listAllFiles(protoFolder).stream().filter(f -> f.getName().endsWith(".proto")).collect(Collectors.toList());
+        var allProtoPackage = listAllProtoFiles(protoFolder).stream()
+                .flatMap(file -> getJavaPackageNameFromProto(file).stream())
+                .collect(Collectors.toUnmodifiableList());
 
-        for (File file : protoFiles) {
-            BufferedReader br = new BufferedReader(new FileReader(file));
-            String line, javaPackage = null;
-            while ((line = br.readLine()) != null && javaPackage == null) {
-                Matcher m = Pattern.compile("option *java_package *= *\"(.*)\";").matcher(line);
-                if (m.matches()) {
-                    javaPackage = m.group(1);
-                }
-            }
-            if (javaPackage != null) {
-                allProtoPackage.add(javaPackage);
-            } else {
-                br = new BufferedReader(new FileReader(file));
-                while ((line = br.readLine()) != null && javaPackage == null) {
-                    Matcher m = Pattern.compile("package *(.*);").matcher(line);
-                    if (m.matches()) {
-                        javaPackage = m.group(1);
-                        allProtoPackage.add(javaPackage);
-                    }
-                }
-            }
-            String serviceName = null;
-            while ((line = br.readLine()) != null && serviceName == null) {
-                Matcher m = Pattern.compile("service *([^{ ]*) *\\{*").matcher(line);
-                if (m.matches()) {
-                    serviceName = m.group(1);
-                }
-            }
-            String protoJavaName = makeJavaName(file.getName().replace(".proto", ""));
-            allProtoJavaName.put(serviceName, protoJavaName);
-        }
+        var allProtoJavaName = listAllProtoFiles(protoFolder).stream()
+                .collect(Collectors.toUnmodifiableMap(
+                        file -> getServiceNameFromProto(file).orElse(file.getName()),
+                        file -> makeJavaName(file.getName().replace(".proto", ""))
+                ));
 
         allProtoPackage.forEach(packageSource -> {
             URL root = Thread.currentThread().getContextClassLoader().getResource(packageSource.replace(".", "/"));
@@ -380,12 +389,45 @@ public class RPCActionsGenerator {
         return handlers;
     }
 
-    private static List<File> listAllFiles(String directoryName) throws IOException {
+    private static List<File> listAllProtoFiles(String directoryName) throws IOException {
         return Files.walk(Path.of(directoryName))
                 .filter(Files::isRegularFile)
                 .map(Path::toFile)
+                .filter(file -> file.getName().endsWith(".proto"))
                 .collect(Collectors.toUnmodifiableList());
     }
+
+    private static Optional<String> getJavaPackageNameFromProto(File protoFile) {
+        try {
+            var br = new BufferedReader(new FileReader(protoFile));
+            var javaPackagePattern = Pattern.compile("option *java_package *= *\"(.*)\";");
+            var protoPackagePattern = Pattern.compile("package *(.*);");
+            return Stream.of(javaPackagePattern, protoPackagePattern).flatMap(pattern -> br.lines()
+                    .flatMap(s -> pattern.matcher(s).results())
+                    .filter(m -> m.groupCount() > 0)
+                    .map(m -> m.group(1))
+            ).findFirst();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<String> getServiceNameFromProto(File protoFile) {
+        try {
+            var br = new BufferedReader(new FileReader(protoFile));
+            var servicePattern = Pattern.compile("service *([^{ ]*) *\\{*");
+            return br.lines()
+                    .flatMap(s -> servicePattern.matcher(s).results())
+                    .filter(m -> m.groupCount() > 0)
+                    .map(m -> m.group(1))
+                    .findAny();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            return Optional.empty();
+        }
+    }
+
 
     private static void prepareGeneratedFolder() {
         try {
@@ -406,8 +448,10 @@ public class RPCActionsGenerator {
 
     private static String makeJavaName(String str) {
         String capitalized = str.substring(0, 1).toUpperCase() + str.substring(1);
-        var tokenized = Arrays.stream(capitalized.split("-")).reduce((subtotal, element) -> subtotal + uppercaseFirstLetter(element));
-        var tokenized2 = Arrays.stream(tokenized.orElse(str).split("_")).reduce((subtotal, element) -> subtotal + uppercaseFirstLetter(element));
+        var tokenized = Arrays.stream(capitalized.split("-")).reduce(
+                (subtotal, element) -> subtotal + uppercaseFirstLetter(element));
+        var tokenized2 = Arrays.stream(tokenized.orElse(str).split("_")).reduce(
+                (subtotal, element) -> subtotal + uppercaseFirstLetter(element));
         return tokenized2.orElse(str);
     }
 
@@ -419,8 +463,6 @@ public class RPCActionsGenerator {
         String simpleName = requestTypeName.replace(protoPackage + ".", "");
         return getDotSimpleName(String.format("%s.Builder", simpleName));
     }
-
-
 
     private static String mapType(Descriptors.FieldDescriptor.JavaType javaType) {
         return TYPE_MAPPING.getOrDefault(javaType, "Object");
