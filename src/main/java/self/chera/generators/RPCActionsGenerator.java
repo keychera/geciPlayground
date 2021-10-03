@@ -126,7 +126,8 @@ public class RPCActionsGenerator {
 
                         serviceClassToAdd = unaryActionClass;
                         try {
-                            addStaticUnaryExec(rpcActionsClass, protoClass, serviceName, requestType, responseType);
+                            addUnaryStaticExec(
+                                    rpcActionsClass, protoClass, className, serviceName, requestType, responseType);
                         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
                             e.printStackTrace();
                             System.err.printf("not adding static exec method for service: %s%n", serviceName);
@@ -253,14 +254,19 @@ public class RPCActionsGenerator {
         }
     }
 
-    private static void addStaticUnaryExec(
-            JavaClassSource source, Class<?> protoClass, String serviceName, Class<?> requestType, Class<?> responseType
+    private static void addUnaryStaticExec(
+            JavaClassSource source, Class<?> protoClass, String className, String serviceName, Class<?> requestType,
+            Class<?> responseType
     ) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         var methodName = Introspector.decapitalize(serviceName);
         var params = (Descriptors.Descriptor) requestType.getMethod("getDescriptor").invoke(null);
 
         var unaryStaticExecMethod = source
                 .addMethod().setPublic().setReturnType(responseType).setName(methodName);
+
+        if (classesToDeprecate.contains(String.format("%s.%s", className, serviceName))) {
+            unaryStaticExecMethod.addAnnotation(Deprecated.class);
+        }
 
         var setterList = params.getFields().stream().map(field -> {
             String paramType, setterName;
@@ -290,7 +296,7 @@ public class RPCActionsGenerator {
                     var messageType = field.getMessageType().getName();
                     paramType = String.format("%s.%s", protoClass.getCanonicalName(), messageType);
                 } else {
-                    paramType =  mapType(field.getJavaType());
+                    paramType = mapType(field.getJavaType());
                 }
                 paramType = resolveTypeIfRepeated(repeated, paramType);
             }
