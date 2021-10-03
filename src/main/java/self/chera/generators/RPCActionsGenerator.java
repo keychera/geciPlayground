@@ -15,13 +15,12 @@ import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.ParameterizedType;
-import java.net.URL;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.function.Function;
-import java.util.regex.MatchResult;
-import java.util.regex.Matcher;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -41,15 +40,7 @@ public class RPCActionsGenerator {
     private static String packageFolderName;
     private static String targetLocation;
 
-
-    private static class HandlerWrapper {
-        public Class<?> protoClass = null;
-        public Class<?> handlerGrpcClass = null;
-        public Class<?> blockingStubClass = null;
-        public Class<?> stubClass = null;
-    }
-
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
         var protoFolder = args[0];
         targetLocation = args[1];
         prepareGeneratedFolder();
@@ -130,7 +121,7 @@ public class RPCActionsGenerator {
                                 String.format("Function<%s,%s>", dot_requestTypeName, dot_responseTypeName))
                                 .setBody(String.format(
                                         "return (req) -> getClient().%s(req);",
-                                        lowercaseFirstLetter(serviceName)
+                                        Introspector.decapitalize(serviceName)
                                 )).getOrigin();
 
                         serviceClassToAdd = unaryActionClass;
@@ -164,7 +155,7 @@ public class RPCActionsGenerator {
                                         dot_requestTypeName
                                 )).setBody(String.format(
                                 "return (resStream) -> getClient().%s(resStream);",
-                                lowercaseFirstLetter(serviceName)
+                                Introspector.decapitalize(serviceName)
                         )).getOrigin();
 
                         rpcActionsClass.addImport(StreamObserver.class);
@@ -327,85 +318,66 @@ public class RPCActionsGenerator {
         unaryStaticExecMethod.setBody(bodyBuilder.toString());
     }
 
-    private static Map<String, HandlerWrapper> getListOfProtoHandler(String protoFolder) throws IOException {
-        Map<String, HandlerWrapper> handlers = new HashMap<>();
+    private static Map<String, HandlerWrapper> getListOfProtoHandler(String protoFolder) {
+        var handlerClasses = streamAllFiles(protoFolder, ".proto")
+                .map(file -> Map.entry(
+                        getServiceNameFromProto(file).orElse(file.getName()),
+                        getProtoJavaInfo(file).orElse(ProtoJavaInfo.NULL)
+                ))
+                .filter(entry -> entry.getValue().isNotNull())
+                .flatMap(entry -> {
+                    var serviceName = entry.getKey();
+                    var packageName = entry.getValue().packageName;
+                    var protoJavaName = entry.getValue().protoJavaName;
+                    var protoFile = entry.getValue().protoFile;
+                    return getPackageDir(packageName).stream()
+                            .flatMap(packageDir -> streamAllFiles(packageDir, ".class")
+                                    .filter(isFileRelevant(serviceName, protoJavaName))
+                                    .flatMap(classFile -> GrpcClassInfo.resolve(packageName, protoFile, classFile).stream()
+                                            .filter(GrpcClassInfo::isNecessary)
+                                    )
+                            );
+                }).collect(Collectors.groupingBy(GrpcClassInfo::getHandlerName));
 
-        var allProtoPackage = listAllProtoFiles(protoFolder).stream()
-                .flatMap(file -> getJavaPackageNameFromProto(file).stream())
-                .collect(Collectors.toUnmodifiableList());
-
-        var allProtoJavaName = listAllProtoFiles(protoFolder).stream()
-                .collect(Collectors.toUnmodifiableMap(
-                        file -> getServiceNameFromProto(file).orElse(file.getName()),
-                        file -> makeJavaName(file.getName().replace(".proto", ""))
-                ));
-
-        allProtoPackage.forEach(packageSource -> {
-            URL root = Thread.currentThread().getContextClassLoader().getResource(packageSource.replace(".", "/"));
-
-            // Filter .class files.
-            if (root != null) {
-                File[] files = new File(root.getFile()).listFiles((dir, name) -> name.endsWith(".class"));
-
-                // Find the classes
-                assert files != null;
-                for (File file : files) {
-                    String className = file.getName().replaceAll(".class$", "");
-                    Matcher m = Pattern.compile("(.*)Grpc.*").matcher(className);
-                    if (m.matches()) {
-                        String handlerName = m.group(1);
-                        if (!handlers.containsKey(handlerName)) {
-                            handlers.put(handlerName, new HandlerWrapper());
-                        }
-                        try {
-                            if (className.matches(".*Grpc$")) {
-                                handlers.get(handlerName).handlerGrpcClass =
-                                        Class.forName(packageSource + "." + className);
-                                String protoJavaName = allProtoJavaName.get(handlerName);
-                                Class<?> protoClass;
-                                try {
-                                    protoClass = Class.forName(packageSource + "." + protoJavaName);
-                                    handlers.get(handlerName).protoClass = protoClass;
-                                } catch (ClassNotFoundException e) {
-                                    e.printStackTrace();
-                                    throw new RuntimeException(e.getMessage());
-                                }
-                            } else if (className.matches(".*Grpc.*BlockingStub")) {
-                                handlers.get(handlerName).blockingStubClass =
-                                        Class.forName(packageSource + "." + className);
-                            } else if (className.matches(".*Grpc.*FutureStub")) {
-                                // do nothing yet
-                            } else if (className.matches(".*Grpc.*Stub")) {
-                                handlers.get(handlerName).stubClass = Class.forName(packageSource + "." + className);
-                            }
-                        } catch (ClassNotFoundException e) {
-                            e.printStackTrace();
-                            throw new RuntimeException(e.getMessage());
-                        }
-                    }
-                }
-            }
-        });
-        return handlers;
+        return handlerClasses.entrySet().stream()
+                .flatMap(entry -> {
+                    var wrapper = new HandlerWrapper();
+                    entry.getValue().get(0).asProtoClass().ifPresent(wrapper::setProtoClass);
+                    entry.getValue().stream()
+                            .filter(GrpcClassInfo::isNecessary)
+                            .forEach(info -> {
+                                info.asHandlerClass().ifPresent(wrapper::setHandlerGrpcClass);
+                                info.astBlockingStub().ifPresent(wrapper::setBlockingStubClass);
+                                info.asStub().ifPresent(wrapper::setStubClass);
+                            });
+                    return Stream.of(Map.entry(entry.getKey(), wrapper));
+                })
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    private static List<File> listAllProtoFiles(String directoryName) throws IOException {
-        return Files.walk(Path.of(directoryName))
-                .filter(Files::isRegularFile)
-                .map(Path::toFile)
-                .filter(file -> file.getName().endsWith(".proto"))
-                .collect(Collectors.toUnmodifiableList());
+    private static Stream<File> streamAllFiles(String directoryName, String extension) {
+        try {
+            return Files.walk(Path.of(directoryName))
+                    .filter(Files::isRegularFile)
+                    .map(Path::toFile)
+                    .filter(file -> file.getName().endsWith(extension));
+        } catch (IOException e) {
+            e.printStackTrace();
+            return Stream.empty();
+        }
     }
 
-    private static Optional<String> getJavaPackageNameFromProto(File protoFile) {
+    private static Optional<ProtoJavaInfo> getProtoJavaInfo(File protoFile) {
         try {
             var br = new BufferedReader(new FileReader(protoFile));
             var javaPackagePattern = Pattern.compile("option *java_package *= *\"(.*)\";");
             var protoPackagePattern = Pattern.compile("package *(.*);");
+            var className = makeJavaName(protoFile.getName().replace(".proto", ""));
             return Stream.of(javaPackagePattern, protoPackagePattern).flatMap(pattern -> br.lines()
                     .flatMap(s -> pattern.matcher(s).results())
                     .filter(m -> m.groupCount() > 0)
                     .map(m -> m.group(1))
+                    .map(packageName -> new ProtoJavaInfo(protoFile, packageName, className))
             ).findFirst();
         } catch (FileNotFoundException e) {
             e.printStackTrace();
@@ -428,6 +400,26 @@ public class RPCActionsGenerator {
         }
     }
 
+    private static Optional<String> getPackageDir(String packageName) {
+        var url = Thread.currentThread().getContextClassLoader().getResource(packageName.replace(".", "/"));
+        if (url == null) {
+            return Optional.empty();
+        } else {
+            try {
+                return Optional.of(Path.of(url.toURI()).toString());
+            } catch (URISyntaxException e) {
+                e.printStackTrace();
+                return Optional.empty();
+            }
+        }
+    }
+
+    private static Predicate<File> isFileRelevant(String serviceName, String protoJavaName) {
+        return classFile -> {
+            var className = classFile.getName().strip().toLowerCase();
+            return className.contains(protoJavaName.toLowerCase()) || className.contains(serviceName.toLowerCase());
+        };
+    }
 
     private static void prepareGeneratedFolder() {
         try {
@@ -438,14 +430,6 @@ public class RPCActionsGenerator {
         }
     }
 
-    private static String lowercaseFirstLetter(String str) {
-        return str.substring(0, 1).toLowerCase() + str.substring(1);
-    }
-
-    private static String uppercaseFirstLetter(String str) {
-        return str.substring(0, 1).toUpperCase() + str.substring(1);
-    }
-
     private static String makeJavaName(String str) {
         String capitalized = str.substring(0, 1).toUpperCase() + str.substring(1);
         var tokenized = Arrays.stream(capitalized.split("-")).reduce(
@@ -453,6 +437,10 @@ public class RPCActionsGenerator {
         var tokenized2 = Arrays.stream(tokenized.orElse(str).split("_")).reduce(
                 (subtotal, element) -> subtotal + uppercaseFirstLetter(element));
         return tokenized2.orElse(str);
+    }
+
+    private static String uppercaseFirstLetter(String str) {
+        return str.substring(0, 1).toUpperCase() + str.substring(1);
     }
 
     private static String getDotSimpleName(String str) {
@@ -485,4 +473,135 @@ public class RPCActionsGenerator {
             Descriptors.FieldDescriptor.JavaType.STRING, String.class.getSimpleName(),
             Descriptors.FieldDescriptor.JavaType.BYTE_STRING, ByteString.class.getCanonicalName()
     );
+
+    private static class HandlerWrapper {
+        public Class<?> protoClass = null;
+        public Class<?> handlerGrpcClass = null;
+        public Class<?> blockingStubClass = null;
+        public Class<?> stubClass = null;
+
+        public void setProtoClass(Class<?> protoClass) {
+            this.protoClass = protoClass;
+        }
+
+        public void setHandlerGrpcClass(Class<?> handlerGrpcClass) {
+            this.handlerGrpcClass = handlerGrpcClass;
+        }
+
+        public void setBlockingStubClass(Class<?> blockingStubClass) {
+            this.blockingStubClass = blockingStubClass;
+        }
+
+        public void setStubClass(Class<?> stubClass) {
+            this.stubClass = stubClass;
+        }
+    }
+
+    private static class ProtoJavaInfo {
+        public final File protoFile;
+        public final String packageName;
+        public final String protoJavaName;
+
+        public ProtoJavaInfo(File protoFile, String packageName, String protoJavaName) {
+            this.protoFile = protoFile;
+            this.packageName = packageName;
+            this.protoJavaName = protoJavaName;
+        }
+
+        public boolean isNotNull() {
+            return !equals(NULL);
+        }
+
+        public static ProtoJavaInfo NULL = new ProtoJavaInfo(null, "", "");
+    }
+
+    private static class GrpcClassInfo {
+        public static final Pattern mainPattern = Pattern.compile("(.*)Grpc.*\\.class$");
+        public static final Pattern handlerClassPattern = Pattern.compile(".*Grpc$");
+        public static final Pattern blockingStubPattern = Pattern.compile(".*Grpc.*BlockingStub$");
+        public static final Pattern futureStubPattern = Pattern.compile(".*Grpc.*FutureStub$");
+        public static final Pattern stubPattern = Pattern.compile(".*Grpc.*Stub$");
+
+        private final File protoFile;
+        private final String packageName;
+        private final String className;
+
+        private final String handlerName;
+        public String getHandlerName() {
+            return handlerName;
+        }
+
+        private GrpcClassInfo(String packageName, File protoFile, File classFile, String handlerName) {
+            this.protoFile = protoFile;
+            this.packageName = packageName;
+            this.className = classFile.getName().replaceAll(".class$", "");
+            this.handlerName = handlerName;
+        }
+
+        public static Optional<GrpcClassInfo> resolve(String packageName, File protoFile, File classFile) {
+            return mainPattern.matcher(classFile.getName()).results()
+                    .filter(m -> m.groupCount() > 0)
+                    .map(m -> new GrpcClassInfo(
+                            packageName, protoFile, classFile,
+                            m.group(1).replaceAll(".class$", "")
+                    ))
+                    .findAny();
+        }
+
+        public boolean isNecessary() {
+            return matchClass(handlerClassPattern)
+                    || matchClass(blockingStubPattern)
+                    || matchClass(futureStubPattern)
+                    || matchClass(stubPattern);
+        }
+
+        public Optional<Class<?>> asProtoClass() {
+            var protoJavaName = makeJavaName(protoFile.getName().replace(".proto", ""));
+            try {
+                return Optional.of(Class.forName(packageName + "." + protoJavaName));
+            } catch (ClassNotFoundException e) {
+                e.printStackTrace();
+                return Optional.empty();
+            }
+        }
+
+        public Optional<Class<?>> asHandlerClass() {
+            return getClassWithMatchingPattern(handlerClassPattern);
+        }
+
+        public Optional<Class<?>> astBlockingStub() {
+            return getClassWithMatchingPattern(blockingStubPattern);
+        }
+
+        public Optional<Class<?>> asFutureStub() {
+            return getClassWithMatchingPattern(futureStubPattern);
+        }
+
+        public Optional<Class<?>> asStub() {
+            var notBlocking = !blockingStubPattern.matcher(className).matches();
+            var notFuture = !futureStubPattern.matcher(className).matches();
+            if (notBlocking && notFuture) {
+                return getClassWithMatchingPattern(stubPattern);
+            } else {
+                return Optional.empty();
+            }
+        }
+
+        private Optional<Class<?>> getClassWithMatchingPattern(Pattern pattern) {
+            if (matchClass(pattern)) {
+                try {
+                    return Optional.of(Class.forName(packageName + "." + className));
+                } catch (ClassNotFoundException e) {
+                    e.printStackTrace();
+                    return Optional.empty();
+                }
+            } else {
+                return Optional.empty();
+            }
+        }
+
+        private boolean matchClass(Pattern pattern) {
+            return pattern.matcher(className).matches();
+        }
+    }
 }
