@@ -44,13 +44,14 @@ public class RPCActionsGenerator {
         var protoFolder = args[0];
         targetLocation = args[1];
         prepareGeneratedFolder();
-        Map<String, HandlerWrapper> listOfHandler = getListOfProtoHandler(protoFolder);
+        var listOfHandler = getListOfProtoHandler(protoFolder);
         listOfHandler.forEach((handlerName, wrapper) -> {
-            String className = handlerName.replace("Handler", "Grpc");
-            final JavaClassSource rpcActionsClass = Roaster.create(JavaClassSource.class);
-            rpcActionsClass.setPackage(GENERATED_PACKAGE).setName(className);
+            var className = handlerName.replace("Handler", "Grpc");
+            final var rpcActionsClass = Roaster.create(JavaClassSource.class);
 
+            // class identity
             rpcActionsClass.addImport(RPCClass.class);
+            rpcActionsClass.setPackage(GENERATED_PACKAGE).setName(className);
             rpcActionsClass.setSuperType(String.format("%s<%s>", RPCClass.class.getName(), className));
 
             rpcActionsClass.addMethod().setConstructor(true).setPrivate().setBody("");
@@ -60,32 +61,33 @@ public class RPCActionsGenerator {
                     .setBody(String.format("return new %s();", className));
 
             // each grpc service class
-            Class<?> handler = wrapper.handlerGrpcClass;
-            List<Field> allMethodDescriptor = Arrays.stream(handler.getDeclaredFields()).filter(
-                    t -> t.getType().isAssignableFrom(MethodDescriptor.class)).collect(Collectors.toList());
-            for (Field declaredField : allMethodDescriptor) {
+            var handler = wrapper.handlerGrpcClass;
+            var allMethodDescriptor = Stream.of(handler.getDeclaredFields())
+                    .filter(t -> t.getType().isAssignableFrom(MethodDescriptor.class))
+                    .collect(Collectors.toList());
+            allMethodDescriptor.forEach(methodDescriptor -> {
                 ParameterizedType types;
                 String serviceName;
                 MethodDescriptor.MethodType serviceType;
                 try {
-                    MethodDescriptor<?, ?> service = (MethodDescriptor<?, ?>) declaredField.get(handler);
+                    var service = (MethodDescriptor<?, ?>) methodDescriptor.get(handler);
                     serviceType = service.getType();
                     serviceName = service.getBareMethodName();
-                    types = (ParameterizedType) declaredField.getGenericType();
+                    types = (ParameterizedType) methodDescriptor.getGenericType();
                 } catch (IllegalAccessException e) {
                     e.printStackTrace();
                     throw new RuntimeException(e);
                 }
                 assert serviceName != null;
-                Class<?> protoClass = wrapper.protoClass;
-                String protoPackage = protoClass.getPackageName();
-                Class<?> requestType = (Class<?>) types.getActualTypeArguments()[0];
-                Class<?> responseType = (Class<?>) types.getActualTypeArguments()[1];
-                String requestTypeName = requestType.getTypeName().replace("$", ".");
-                String responseTypeName = responseType.getTypeName().replace("$", ".");
+                var protoClass = wrapper.protoClass;
+                var protoPackage = protoClass.getPackageName();
+                var requestType = (Class<?>) types.getActualTypeArguments()[0];
+                var responseType = (Class<?>) types.getActualTypeArguments()[1];
+                var requestTypeName = requestType.getTypeName().replace("$", ".");
+                var responseTypeName = responseType.getTypeName().replace("$", ".");
                 System.out.printf(
-                        "Adding service (%s) class %s, req: %s res: %s%n", serviceType.name(), serviceName,
-                        requestTypeName, responseTypeName
+                        "Adding service (%s) class %s, req: %s res: %s%n",
+                        serviceType.name(), serviceName, requestTypeName, responseTypeName
                 );
 
                 rpcActionsClass.addImport(protoClass);
@@ -107,27 +109,32 @@ public class RPCActionsGenerator {
                         dot_responseTypeName = getDotSimpleName(responseTypeName.replace(protoPackage + ".", ""));
                         dot_builderTypeName = getDotBuilderTypeName(protoPackage, requestTypeName);
 
-                        final JavaClassSource unaryActionClass = Roaster.create(JavaClassSource.class);
-                        unaryActionClass.setName(serviceName).setPublic().setStatic(true).setSuperType(
-                                String.format("%s<%s,%s>", UNARY_PARENT_CLASS, dot_requestTypeName,
+                        final var unaryActionClass = Roaster.create(JavaClassSource.class);
+                        unaryActionClass.setName(serviceName).setPublic().setStatic(true)
+                                .setSuperType(String.format("%s<%s,%s>", UNARY_PARENT_CLASS, dot_requestTypeName,
                                         dot_responseTypeName
-                                ))
-                                .addField().setName("requestBuilder").setPublic().setType(
-                                dot_builderTypeName).setLiteralInitializer(
-                                String.format("%s.newBuilder();", dot_requestTypeName)).getOrigin()
-                                .addMethod().setName("getRequest").setProtected().setReturnType(
-                                dot_requestTypeName).setBody("return requestBuilder.build();").getOrigin().addMethod()
-                                .setName("getAction").setProtected().setReturnType(
-                                String.format("Function<%s,%s>", dot_requestTypeName, dot_responseTypeName))
+                                ));
+
+                        unaryActionClass.addField().setName("requestBuilder").setPublic().setType(dot_builderTypeName)
+                                .setLiteralInitializer(String.format("%s.newBuilder();", dot_requestTypeName));
+
+                        unaryActionClass.addMethod().setName("getRequest").setProtected()
+                                .setReturnType(dot_requestTypeName).setBody("return requestBuilder.build();");
+
+                        unaryActionClass.addMethod().setName("getAction").setProtected()
+                                .setReturnType(
+                                        String.format("Function<%s,%s>", dot_requestTypeName, dot_responseTypeName)
+                                )
                                 .setBody(String.format(
                                         "return (req) -> getClient().%s(req);",
                                         Introspector.decapitalize(serviceName)
-                                )).getOrigin();
+                                ));
 
                         serviceClassToAdd = unaryActionClass;
                         try {
                             addUnaryStaticExec(
-                                    rpcActionsClass, protoClass, className, serviceName, requestType, responseType);
+                                    rpcActionsClass, protoClass, className, serviceName, requestType, responseType
+                            );
                         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
                             e.printStackTrace();
                             System.err.printf("not adding static exec method for service: %s%n", serviceName);
@@ -139,25 +146,35 @@ public class RPCActionsGenerator {
                         dot_responseTypeName = getDotSimpleName(responseTypeName.replace(protoPackage + ".", ""));
                         dot_builderTypeName = getDotBuilderTypeName(protoPackage, requestTypeName);
 
-                        final JavaClassSource clientStreamActionClass = Roaster.create(JavaClassSource.class);
+                        final var clientStreamActionClass = Roaster.create(JavaClassSource.class);
                         clientStreamActionClass.setName(serviceName).setPublic().setStatic(true)
-                                .setSuperType(
-                                        String.format("%s<%s,%s>", CLIENT_STREAM_PARENT_CLASS, dot_requestTypeName,
-                                                dot_responseTypeName
-                                        )).addField().setName("requestBuilder").setPublic()
-                                .setType(dot_builderTypeName).setLiteralInitializer(
-                                String.format("%s.newBuilder();", dot_requestTypeName)).getOrigin().addMethod().setName(
-                                "getRequest").setProtected()
-                                .setReturnType(dot_requestTypeName).setBody(
-                                "var req = requestBuilder.build(); requestBuilder.clear(); return req;").getOrigin().addMethod()
-                                .setName("getRequestStreamAction").setProtected().setReturnType(
-                                String.format("Function<StreamObserver<%s>,StreamObserver<%s>>", dot_responseTypeName,
-                                        // switched response and request position for ClientStream
-                                        dot_requestTypeName
-                                )).setBody(String.format(
-                                "return (resStream) -> getClient().%s(resStream);",
-                                Introspector.decapitalize(serviceName)
-                        )).getOrigin();
+                                .setSuperType(String.format(
+                                        "%s<%s,%s>", CLIENT_STREAM_PARENT_CLASS, dot_requestTypeName,
+                                        dot_responseTypeName
+                                ));
+
+                        clientStreamActionClass.addField().setName("requestBuilder")
+                                .setPublic().setType(dot_builderTypeName)
+                                .setLiteralInitializer(
+                                        String.format("%s.newBuilder();", dot_requestTypeName)
+                                );
+
+                        clientStreamActionClass.addMethod().setName("getRequest")
+                                .setProtected().setReturnType(dot_requestTypeName)
+                                .setBody(
+                                        "var req = requestBuilder.build(); requestBuilder.clear(); return req;"
+                                );
+
+                        // switched response and request position for ClientStream
+                        clientStreamActionClass.addMethod().setName("getRequestStreamAction").setProtected()
+                                .setReturnType(String.format(
+                                        "Function<StreamObserver<%s>, StreamObserver<%s>>",
+                                        dot_responseTypeName, dot_requestTypeName
+                                ))
+                                .setBody(String.format(
+                                        "return (resStream) -> getClient().%s(resStream);",
+                                        Introspector.decapitalize(serviceName)
+                                ));
 
                         rpcActionsClass.addImport(StreamObserver.class);
                         serviceClassToAdd = clientStreamActionClass;
@@ -172,13 +189,13 @@ public class RPCActionsGenerator {
                     }
                     rpcActionsClass.addNestedType(serviceClassToAdd);
                 }
-            }
+            });
 
 
-            String sourceCode = rpcActionsClass.toString().replace(DOT, ".");
-            String filename = String.format("%s/%s.java", packageFolderName, className);
+            var sourceCode = rpcActionsClass.toString().replace(DOT, ".");
+            var filename = String.format("%s/%s.java", packageFolderName, className);
             try {
-                File classFile = new File(filename);
+                var classFile = new File(filename);
                 if (classFile.createNewFile()) {
                     System.out.println("File created: " + classFile.getName());
                 } else {
