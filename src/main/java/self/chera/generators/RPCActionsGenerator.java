@@ -334,14 +334,10 @@ public class RPCActionsGenerator {
                     var protoJavaName = entry.getValue().protoJavaName;
                     var protoFile = entry.getValue().protoFile;
                     return getPackageDir(packageName).stream()
-                            .flatMap(packageDir -> streamAllFiles(packageDir, ".class")
-                                    .filter(isFileRelevant(serviceName, protoJavaName))
-                                    .flatMap(classFile -> GrpcClassInfo.resolve(packageName, protoFile,
-                                            classFile
-                                            ).stream()
-                                                    .filter(GrpcClassInfo::isNecessary)
-                                    )
-                            );
+                            .flatMap(packageDir -> streamAllFiles(packageDir, ".class"))
+                            .filter(isFileRelevant(serviceName, protoJavaName))
+                            .flatMap(classFile -> GrpcClassInfo.resolve(packageName, protoFile, classFile).stream())
+                            .filter(GrpcClassInfo::isNecessary);
                 }).collect(Collectors.groupingBy(GrpcClassInfo::getHandlerName));
 
         return handlerClasses.entrySet().stream()
@@ -352,7 +348,7 @@ public class RPCActionsGenerator {
                             .filter(GrpcClassInfo::isNecessary)
                             .forEach(info -> {
                                 info.asHandlerClass().ifPresent(wrapper::setHandlerGrpcClass);
-                                info.astBlockingStub().ifPresent(wrapper::setBlockingStubClass);
+                                info.asBlockingStub().ifPresent(wrapper::setBlockingStubClass);
                                 info.asStub().ifPresent(wrapper::setStubClass);
                             });
                     return Stream.of(Map.entry(entry.getKey(), wrapper));
@@ -436,12 +432,11 @@ public class RPCActionsGenerator {
     }
 
     private static String makeJavaName(String str) {
-        String capitalized = str.substring(0, 1).toUpperCase() + str.substring(1);
-        var tokenized = Arrays.stream(capitalized.split("-")).reduce(
-                (subtotal, element) -> subtotal + uppercaseFirstLetter(element));
-        var tokenized2 = Arrays.stream(tokenized.orElse(str).split("_")).reduce(
-                (subtotal, element) -> subtotal + uppercaseFirstLetter(element));
-        return tokenized2.orElse(str);
+        return Stream.of(str)
+                .map(RPCActionsGenerator::uppercaseFirstLetter)
+                .flatMap(s -> Stream.of(s.split("[-_]")))
+                .reduce((subtotal, element) -> subtotal + uppercaseFirstLetter(element))
+                .orElse(str);
     }
 
     private static String uppercaseFirstLetter(String str) {
@@ -575,7 +570,7 @@ public class RPCActionsGenerator {
             return getClassWithMatchingPattern(handlerClassPattern);
         }
 
-        public Optional<Class<?>> astBlockingStub() {
+        public Optional<Class<?>> asBlockingStub() {
             return getClassWithMatchingPattern(blockingStubPattern);
         }
 
